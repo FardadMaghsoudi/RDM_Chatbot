@@ -1,0 +1,10 @@
+fastapi
+pydantic
+PyPDF2
+requests
+beautifulsoup4
+sentence-transformers
+scikit-learn
+numpy
+transformers
+torch 
