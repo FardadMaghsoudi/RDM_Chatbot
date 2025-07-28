@@ -1,3 +1,6 @@
+import os
+from dotenv import load_dotenv
+load_dotenv()
 from fastapi import FastAPI
 from pydantic import BaseModel
 import requests
@@ -7,9 +10,11 @@ from .web_utils import scrape_webpage
 from .mistral_model import load_mistral_model, generate_answer
 import config
 
-# Download PDFs and load text
-pdf_folder = download_pdfs_from_webpage(config.POLICIES_URL, config.PDF_FOLDER)
-pdf_text = load_all_pdfs(pdf_folder)
+# NOTE: Uncomment the next line if you want to download PDFs again
+# pdf_folder = download_pdfs_from_webpage(config.POLICIES_URL, config.PDF_FOLDER)
+
+# Load PDFs and split text
+pdf_text = load_all_pdfs(config.PDF_FOLDER)
 pdf_chunks = split_text(pdf_text)
 
 # Scrape web pages and split text

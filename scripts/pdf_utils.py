@@ -14,13 +14,15 @@ def load_pdf_text(pdf_path):
 
 def load_all_pdfs(folder_path):
     all_text = ""
-    for filename in os.listdir(folder_path):
-        if filename.endswith(".pdf"):
-            full_path = os.path.join(folder_path, filename)
-            all_text += load_pdf_text(full_path) + "\n"
+    for root, dirs, files in os.walk(folder_path):
+        for filename in files:
+            if filename.endswith(".pdf"):
+                full_path = os.path.join(root, filename)
+                all_text += load_pdf_text(full_path) + "\n"
     return all_text
 
-def download_pdfs_from_webpage(url, download_folder="tudelft_policies"): 
+# TODO: add support for other file types
+def download_pdfs_from_webpage(url, download_folder="../policies/tudelft_policies"): 
     os.makedirs(download_folder, exist_ok=True)
     response = requests.get(url)
     soup = BeautifulSoup(response.content, "html.parser")

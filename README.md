@@ -21,11 +21,18 @@ Intelligent RDM Support
    pip install -r requirements.txt
    ```
 
+4. **Create a .env file in the root of the project with the following structure:**
+
+   ```code
+   HF_TOKEN="add your token here"
+   ```
+
+   The HF_TOKEN can be generated from the HuggingFace website after you create an account. It is used to access the models for this project.
 
 ## Project Structure
 
 - `scripts/` — All main Python modules and entry point
-- `tudelft_policies/` — Downloaded PDFs
+- `policies/` — Downloaded PDFs
 - `requirements.txt` — Python dependencies
 - `README.md` — This file
 
