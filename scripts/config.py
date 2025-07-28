@@ -17,4 +17,11 @@ WEB_URLS = [
 ]
 MODEL_NAME = "mistralai/Mistral-7B-Instruct-v0.2"
 HF_TOKEN = os.environ.get("HF_TOKEN")
-PDF_FOLDER = "policies" 
+PDF_FOLDER = "policies"
+
+# Intermediate data file names
+PREPROCESSED_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "preprocessed-data")
+
+PDF_TEXT_PATH = os.path.join(PREPROCESSED_DATA_DIR, f"intermediate_pdf_text.pkl")
+PDF_CHUNKS_PATH = os.path.join(PREPROCESSED_DATA_DIR, f"intermediate_pdf_chunks.pkl")
+WEB_CHUNKS_PATH = os.path.join(PREPROCESSED_DATA_DIR, f"intermediate_web_chunks.pkl") 

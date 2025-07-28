@@ -3,6 +3,7 @@ import PyPDF2
 import requests
 from bs4 import BeautifulSoup
 import re
+import pickle
 
 def load_pdf_text(pdf_path):
     text = ""
@@ -77,3 +78,23 @@ def download_pdfs_from_webpage(url, download_folder="../policies/tudelft_policie
         except Exception as e:
             print(f"Failed to process Zenodo page {zenodo_url}: {e}")
     return download_folder 
+
+def save_or_load_pdf_text(pdf_text_path, pdf_folder):
+    if os.path.exists(pdf_text_path):
+        with open(pdf_text_path, "rb") as f:
+            return pickle.load(f)
+    else:
+        pdf_text = load_all_pdfs(pdf_folder)
+        with open(pdf_text_path, "wb") as f:
+            pickle.dump(pdf_text, f)
+        return pdf_text
+
+def save_or_load_pdf_chunks(pdf_chunks_path, pdf_text, split_text_func):
+    if os.path.exists(pdf_chunks_path):
+        with open(pdf_chunks_path, "rb") as f:
+            return pickle.load(f)
+    else:
+        pdf_chunks = split_text_func(pdf_text)
+        with open(pdf_chunks_path, "wb") as f:
+            pickle.dump(pdf_chunks, f)
+        return pdf_chunks 
