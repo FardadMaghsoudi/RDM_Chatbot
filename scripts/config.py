@@ -3,6 +3,14 @@ import os
 
 POLICIES_URL = "https://www.tudelft.nl/en/library/data-management/research-data-management/tu-delft-faculty-policies-for-research-data"
 WEB_URLS = [
+    # main URL of the RDM TU Delft Library
+    "https://www.tudelft.nl/en/library/data-management#c1634274"
+    # data management plan
+    "https://www.tudelft.nl/en/library/data-management/data-management-plan"
+    # data management grant proposal
+    "https://www.tudelft.nl/en/library/data-management/research-data-management/data-management-sections-for-grant-proposals"
+    # about data stewardship
+    "https://www.tudelft.nl/en/library/data-management/get-support-on-data-management/data-stewardship-about"
     # library
     "https://www.tudelft.nl/library",
     "https://www.tudelft.nl/en/about-tu-delft"
