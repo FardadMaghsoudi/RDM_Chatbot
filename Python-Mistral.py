@@ -162,7 +162,7 @@ Created on Thu Jun 26 13:49:23 2025
     
 # #####################     Load Mistral & FastAPI     #################### 
 # model_name = "mistralai/Mistral-7B-Instruct-v0.2"
-# hf_token = "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"
+# hf_token = "HF_TOKEN"
 # tokenizer = AutoTokenizer.from_pretrained(model_name, token=hf_token)
 # # Set device for torch
 # DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
