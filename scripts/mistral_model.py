@@ -1,14 +1,43 @@
+import os
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline 
-import torch
+from huggingface_hub import snapshot_download
 
-def load_mistral_model(model_name, hf_token):
-    tokenizer = AutoTokenizer.from_pretrained(model_name, token=hf_token)
-    DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name, token=hf_token, 
-        torch_dtype=torch.float16 if DEVICE.type == "cuda" else torch.float32, 
-        device_map="auto" if DEVICE.type == "cuda" else None
+def download_model(model_name, hf_token, local_model_path):
+    allow_patterns = [
+        "*.safetensors",
+        "config.json",
+        "generation_config.json",
+        "tokenizer.json",
+        "tokenizer.model",
+        "tokenizer_config.json",
+        "special_tokens_map.json",
+        "merges.txt",
+        "vocab.json",
+        "*.model",
+        "*.txt",
+    ]
+    ignore_patterns = [
+        "*.bin", "*.pt", "*.h5", "*.onnx", "*.msgpack", "*.safetensors.index.json"
+    ]
+
+    print(f"Downloading model {model_name} to {local_model_path}")
+    snapshot_download(
+        repo_id=model_name,
+        local_dir=local_model_path,
+        token=hf_token,
+        local_dir_use_symlinks=False,
+        allow_patterns=allow_patterns,
+        ignore_patterns=ignore_patterns
     )
+    print(f"Model {model_name} downloaded to {local_model_path}")
+
+def load_mistral_model(model_name, hf_token, local_model_path):
+    #check if model is already downloaded
+    if not os.path.exists(local_model_path):
+        download_model(model_name, hf_token, local_model_path)
+    tokenizer = AutoTokenizer.from_pretrained(local_model_path, token=hf_token)
+    model = AutoModelForCausalLM.from_pretrained(local_model_path, token=hf_token, device_map="auto")
+
     mistral_pipe = pipeline("text-generation", model=model, tokenizer=tokenizer, max_new_tokens=512)
     return mistral_pipe
 

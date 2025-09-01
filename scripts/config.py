@@ -17,6 +17,7 @@ WEB_URLS = [
 ]
 MODEL_NAME = "mistralai/Mistral-7B-Instruct-v0.2"
 HF_TOKEN = os.environ.get("HF_TOKEN")
+LOCAL_MODEL_PATH = "models/mistral-7b-instruct"
 PDF_FOLDER = "policies"
 
 # Intermediate data file names

@@ -1,13 +1,7 @@
-import os
-import pickle
 from dotenv import load_dotenv
 load_dotenv()
 from fastapi import FastAPI
 from pydantic import BaseModel
-import requests
-from vector_store import split_text, SimpleVectorStore
-from pdf_utils import load_all_pdfs, download_pdfs_from_webpage, save_or_load_pdf_text, save_or_load_pdf_chunks
-from web_utils import scrape_webpage, save_or_load_web_chunks
 from mistral_model import load_mistral_model, generate_answer
 import config
 from data_preprocessing import preprocess_data
@@ -17,7 +11,7 @@ combined_chunks, vector_store = preprocess_data()
 
 # Load Mistral model
 print("Loading Mistral model...")
-mistral_pipe = load_mistral_model(config.MODEL_NAME, config.HF_TOKEN)
+mistral_pipe = load_mistral_model(config.MODEL_NAME, config.HF_TOKEN, config.LOCAL_MODEL_PATH)
 
 app = FastAPI()
 
