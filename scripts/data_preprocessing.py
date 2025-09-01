@@ -6,7 +6,7 @@ import config
 
 def preprocess_data():
 #    NOTE: Uncomment the next line if you want to download PDFs again
-#    pdf_folder = download_pdfs_from_webpage(config.POLICIES_URL, config.PDF_FOLDER)
+#   pdf_folder = download_pdfs_from_webpage(config.POLICIES_URL, config.PDF_FOLDER)
 
     # Ensure preprocessed-data directory exists
     os.makedirs(config.PREPROCESSED_DATA_DIR, exist_ok=True)
