@@ -17,6 +17,7 @@ WEB_URLS = [
     # TU Delft iRODS
     "https://www.tudelft.nl/en/2023/library/easy-fast-accessible-and-secure-research-data-management", 
     "https://hackmd.io/@fardadmaghsoudi/By5RxKF_h",
+    "https://www.tudelft.nl/library/irods",
     # security
     "https://tud365.sharepoint.com/:u:/r/sites/SecurityPrivacyTUD/SitePages/en/Informatiebeveiliging-Nieuws.aspx?csf=1&web=1&e=q8hYWr",
     "https://tud365.sharepoint.com/sites/SecurityPrivacyTUD/SitePages/en/Noodzakelijkheid-van-Dataclassificatie.aspx",
