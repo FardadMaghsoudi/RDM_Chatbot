@@ -32,7 +32,8 @@ WEB_URLS = [
     "https://www.tudelft.nl/library",
     "https://www.tudelft.nl/en/about-tu-delft"
 ]
-MODEL_NAME = "mistralai/Mistral-7B-Instruct-v0.2"
+MODEL_NAME = "MaziyarPanahi/Mistral-7B-Instruct-v0.3-GGUF"
+QUANT_MODEL_NAME = "Mistral-7B-Instruct-v0.3.Q4_K_M.gguf"
 HF_TOKEN = os.environ.get("HF_TOKEN")
 LOCAL_MODEL_PATH = "models/mistral-7b-instruct"
 PDF_FOLDER = "policies"

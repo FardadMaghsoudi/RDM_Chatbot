@@ -11,7 +11,7 @@ combined_chunks, vector_store = preprocess_data()
 
 # Load Mistral model
 print("Loading Mistral model...")
-mistral_pipe = load_mistral_model(config.MODEL_NAME, config.HF_TOKEN, config.LOCAL_MODEL_PATH)
+mistral_pipe = load_mistral_model(config.MODEL_NAME, config.QUANT_MODEL_NAME, config.HF_TOKEN)
 
 app = FastAPI()
 

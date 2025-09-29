@@ -1,6 +1,8 @@
 import os
-from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline 
+from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline, GPTQConfig
 from huggingface_hub import snapshot_download
+import torch
+from llama_cpp import Llama
 
 def download_model(model_name, hf_token, local_model_path):
     allow_patterns = [
@@ -31,18 +33,34 @@ def download_model(model_name, hf_token, local_model_path):
     )
     print(f"Model {model_name} downloaded to {local_model_path}")
 
-def load_mistral_model(model_name, hf_token, local_model_path):
-    #check if model is already downloaded
-    if not os.path.exists(local_model_path):
-        download_model(model_name, hf_token, local_model_path)
-    tokenizer = AutoTokenizer.from_pretrained(local_model_path, token=hf_token)
-    model = AutoModelForCausalLM.from_pretrained(local_model_path, token=hf_token, device_map="auto")
+def load_mistral_model(model_name, quant_model_name, hf_token):
+    mistral_pipe = Llama.from_pretrained( 
+        repo_id=model_name,
+        filename=quant_model_name,
+        n_ctx=8192,
+        n_batch=512,
+        n_threads=None,
+        n_gpu_layers=999,
+        main_gpu=0,
+        tensor_split=None,
+    )
 
-    mistral_pipe = pipeline("text-generation", model=model, tokenizer=tokenizer, max_new_tokens=512)
-    return mistral_pipe
+    def _pipe(prompt: str):
+        out = mistral_pipe.create_completion(
+                    prompt=prompt,
+                    max_tokens=512,
+                    temperature=0.7,
+                    top_p=0.95,
+                    repeat_penalty=1.1,
+                )
+        text = out["choices"][0]["text"]
+        return [{"generated_text": prompt + text}]
+
+    return _pipe
 
 def generate_answer(query, vector_store, mistral_pipe):
     docs = vector_store.similarity_search(query, k=4)
+    # chunks = [(getattr(d, "page_content", d) or "").strip() for d in docs]
     context = "\n\n".join(docs)
     prompt = f"""Answer the following question using the context below:\n\nContext:\n{context}\n\nQuestion: {query}\nAnswer:"""
     result = mistral_pipe(prompt)[0]["generated_text"]
