@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 load_dotenv()
 from fastapi import FastAPI
 from pydantic import BaseModel
-from mistral_model import load_mistral_model, generate_answer
+from mistral_model import get_mistral_model, build_pipe, generate_answer
 import config
 from data_preprocessing import preprocess_data
 
@@ -11,7 +11,8 @@ combined_chunks, vector_store = preprocess_data()
 
 # Load Mistral model
 print("Loading Mistral model...")
-mistral_pipe = load_mistral_model(config.MODEL_NAME, config.QUANT_MODEL_NAME, config.HF_TOKEN)
+mistral_model = get_mistral_model(config.MODEL_NAME, config.QUANT_MODEL_NAME, config.HF_TOKEN)
+mistral_pipe = build_pipe(mistral_model)
 
 app = FastAPI()
 
