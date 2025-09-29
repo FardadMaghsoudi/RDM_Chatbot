@@ -6,10 +6,10 @@ def _build_mistral_model(model_name, quant_model_name, hf_token):
     return Llama.from_pretrained( 
         repo_id=model_name,
         filename=quant_model_name,
-        n_ctx=8192,
-        n_batch=512,
+        n_ctx=4096,
+        n_batch=256,
         n_threads=None,
-        n_gpu_layers=999,
+        n_gpu_layers=28,
         main_gpu=0,
         tensor_split=None,
         hf_token=hf_token,
@@ -25,8 +25,8 @@ def build_pipe(model: Llama):
         out = model.create_completion(
                     prompt=prompt,
                     max_tokens=512,
-                    temperature=0.7,
-                    top_p=0.95,
+                    temperature=0.2,
+                    top_p=0.9,
                     repeat_penalty=1.1,
                 )
         text = out["choices"][0]["text"]
@@ -34,7 +34,7 @@ def build_pipe(model: Llama):
     return _pipe
 
 def generate_answer(query, vector_store, mistral_pipe):
-    docs = vector_store.similarity_search(query, k=4)
+    docs = vector_store.similarity_search(query, k=2)
     chunks = [(getattr(d, "page_content", d) or "").strip() for d in docs]
     context = "\n\n".join(chunks)
     prompt = f"""Answer the following question using the context below:\n\nContext:\n{context}\n\nQuestion: {query}\nAnswer:"""
