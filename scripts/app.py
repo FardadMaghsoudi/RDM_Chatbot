@@ -171,7 +171,7 @@ A minimal chatbot UI built with **Gradio**.
 
     # Status area
     with gr.Row():
-        status_text = gr.Textbox(value=read_backend_status(), label="Backend status", interactive=False, every=1)
+        status_text = gr.Textbox(value=read_backend_status(), label="Backend status", interactive=False)
         refresh_btn = gr.Button("Refresh status")
         reload_btn = gr.Button("Reload backend")
 
@@ -179,6 +179,8 @@ A minimal chatbot UI built with **Gradio**.
     refresh_btn.click(fn=read_backend_status, inputs=None, outputs=status_text)
     reload_btn.click(fn=reload_backend_trigger, inputs=None, outputs=status_text)
 
+    demo.load(fn=read_backend_status, inputs=None, outputs=status_text, every=1)
+    
     chat = gr.ChatInterface(
         fn=bot_fn,
         type="messages",                 # use structured ChatMessage objects
