@@ -179,8 +179,10 @@ A minimal chatbot UI built with **Gradio**.
     refresh_btn.click(fn=read_backend_status, inputs=None, outputs=status_text)
     reload_btn.click(fn=reload_backend_trigger, inputs=None, outputs=status_text)
 
-    demo.load(fn=read_backend_status, inputs=None, outputs=status_text, every=1)
-    
+    # Periodically refresh backend status every 1 second
+    status_timer = gr.Timer(1.0)  # interval in seconds
+    status_timer.tick(fn=read_backend_status, inputs=None, outputs=status_text)
+
     chat = gr.ChatInterface(
         fn=bot_fn,
         type="messages",                 # use structured ChatMessage objects
