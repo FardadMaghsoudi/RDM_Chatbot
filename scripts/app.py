@@ -214,4 +214,4 @@ A minimal chatbot UI built with **Gradio**.
 
 if __name__ == "__main__":
     # share=True if you want a temporary public link
-    demo.launch()
+    demo.launch(share=os.environ.get("GRADIO_SHARE", "false") in ("1", "true", "yes"))
