@@ -156,7 +156,7 @@ def on_clear():
     # Optional hook when the user clicks Clear — here we do nothing.
     return None
 
-with gr.Blocks(title="DemoBot — Gradio Chatbot", theme=gr.themes.Soft()) as demo:
+with gr.Blocks(title="Dizzi — Gradio Chatbot", theme=gr.themes.Soft()) as demo:
     gr.Markdown(
         """
 # 🤖 Dizzi
@@ -171,7 +171,7 @@ A minimal chatbot UI built with **Gradio**.
 
     # Status area
     with gr.Row():
-        status_text = gr.Textbox(value=get_backend_status_str(), label="Backend status", interactive=False)
+        status_text = gr.Textbox(value=read_backend_status(), label="Backend status", interactive=False, every=1)
         refresh_btn = gr.Button("Refresh status")
         reload_btn = gr.Button("Reload backend")
 
@@ -179,34 +179,17 @@ A minimal chatbot UI built with **Gradio**.
     refresh_btn.click(fn=read_backend_status, inputs=None, outputs=status_text)
     reload_btn.click(fn=reload_backend_trigger, inputs=None, outputs=status_text)
 
-    # periodic auto-refresh (poll backend status every 2 seconds)
-    try:
-        status_interval = gr.Interval(interval=2)
-        # call read_backend_status on each tick and update the status textbox
-        status_interval.tick(fn=read_backend_status, inputs=None, outputs=status_text)
-    except Exception:
-        # If Interval API is unavailable in this Gradio version, ignore silently
-        pass
-
     chat = gr.ChatInterface(
         fn=bot_fn,
         type="messages",                 # use structured ChatMessage objects
-        fill_height=True,
         cache_examples=False,
-        submit_btn="Send",
-        stop_btn="Stop",
-        # retry_btn="Regenerate",
-        # undo_btn="Delete last",
-        # clear_btn="Clear",
+        save_history=True,
         chatbot=gr.Chatbot(
             type="messages",
             show_copy_button=True,
             avatar_images=(None, None),   # set custom avatar image paths if you like
             height=500,
         ),
-        # file_count="multiple",
-        # upload=True,
-        # concurrency_limit=16,
     )
 
     # Optional: respond to Clear button
