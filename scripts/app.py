@@ -5,16 +5,53 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 
 import gradio as gr
-from transformers import AutoModelForCausalLM, AutoTokenizer
+import config
+from mistral_model import get_mistral_model, build_pipe, generate_answer
+from data_preprocessing import preprocess_data
 
 from dotenv import load_dotenv
 load_dotenv()  # take environment variables from .env.
 
-SYSTEM_PROMPT = (
-    "You are Dizzi — a friendly helper. Keep replies concise, use markdown, "
-    "and acknowledge any files the user uploads. "
-    "If asked something you don't know, say so honestly."
-)
+# --- Backend loading state (will be populated by background loader) ---
+import threading
+
+# shared state for loader and UI
+backend_status = {"state": "starting", "message": "starting up"}
+status_lock = threading.Lock()
+
+# placeholders for resources filled by the loader thread
+combined_chunks = None
+vector_store = None
+mistral_model = None
+mistral_pipe = None
+
+def _set_status(state: str, message: str = ""):
+    with status_lock:
+        backend_status["state"] = state
+        backend_status["message"] = message
+
+def get_backend_status_str() -> str:
+    with status_lock:
+        return f"{backend_status.get('state')} - {backend_status.get('message', '')}"
+
+def load_backend():
+    """Load preprocessing and model in background to avoid blocking the UI startup."""
+    global combined_chunks, vector_store, mistral_model, mistral_pipe
+    try:
+        _set_status("loading_preprocess", "Preprocessing data and building vector store...")
+        combined_chunks, vector_store = preprocess_data()
+
+        _set_status("loading_model", "Loading Mistral model...")
+        mistral_model = get_mistral_model(config.MODEL_NAME, config.QUANT_MODEL_NAME, config.HF_TOKEN)
+        mistral_pipe = build_pipe(mistral_model)
+
+        _set_status("ready", "Backend ready")
+    except Exception as e:
+        _set_status("error", f"{type(e).__name__}: {e}")
+
+# start loader in background so Gradio UI can come up immediately
+loader_thread = threading.Thread(target=load_backend, daemon=True)
+loader_thread.start()
 
 HELP_TEXT = """\
 **Dizzi commands**
@@ -40,6 +77,24 @@ def small_talk_response(message: str) -> Optional[str]:
         return "I’m **DemoBot**. Nice to meet you!"
     return None
 
+def reload_backend_trigger() -> str:
+    """Trigger a reload of the backend in the background (if not already loading).
+    Returns the new status string immediately."""
+    with status_lock:
+        state = backend_status.get("state")
+        if state in ("loading_preprocess", "loading_model"):
+            return get_backend_status_str()
+        # mark as reloading and start a new loader thread
+        backend_status["state"] = "reloading"
+        backend_status["message"] = "User triggered reload"
+
+    t = threading.Thread(target=load_backend, daemon=True)
+    t.start()
+    return get_backend_status_str()
+
+def read_backend_status() -> str:
+    return get_backend_status_str()
+
 def bot_fn(
     message: gr.ChatMessage, history: List[gr.ChatMessage]
 ):
@@ -48,8 +103,16 @@ def bot_fn(
     - message: the latest user message (with optional files)
     - history: list of prior ChatMessage objects (role='user'|'assistant')
     """
+    # Normalize the incoming message into a plain string (supports str, dict, ChatMessage-like)
     # print(type(message), message)
-    user_text = (message or "").strip()
+    if isinstance(message, str):
+        user_text = message.strip()
+    elif isinstance(message, dict):
+        user_text = (message.get("content") or "").strip()
+    elif hasattr(message, "content"):
+        user_text = (getattr(message, "content") or "").strip()
+    else:
+        user_text = str(message or "").strip()
 
     # Commands
     if user_text.startswith("/help"):
@@ -72,35 +135,22 @@ def bot_fn(
         yield gr.ChatMessage(role="assistant", content=canned)
         return
 
-    # Load the Hugging Face model and tokenizer
-    model_name = "mistralai/Mistral-7B-Instruct-v0.3"
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(model_name)
+    # Ensure the backend is ready before attempting generation
+    with status_lock:
+        curr_state = backend_status.get("state")
+    if curr_state != "ready":
+        yield gr.ChatMessage(role="assistant", content=f"Backend not ready: {get_backend_status_str()}")
+        return
 
-    # Prepare the input for the model
-    input_text = f"{SYSTEM_PROMPT}\n\nUser: {user_text}\nAssistant:"
-    inputs = tokenizer(input_text, return_tensors="pt")
-
-    # Generate the response
-    outputs = model.generate(
-        inputs.input_ids,
-        max_length=512,
-        num_return_sequences=1,
-        temperature=0.7,
-        top_p=0.9,
-        do_sample=True,
-    )
-
-    # Decode the response
-    reply = tokenizer.decode(outputs[0], skip_special_tokens=True)
-
-    print(reply)
-
-    # Extract the assistant's response (after "Assistant:")
-    assistant_reply = reply.split("Assistant:")[-1].strip()
+    try:
+        answer = generate_answer(user_text, vector_store, mistral_pipe)
+    except Exception as e:
+        # Surface an error message to the user rather than crashing the UI
+        yield gr.ChatMessage(role="assistant", content=f"Error generating answer: {type(e).__name__}: {e}")
+        return
 
     # Stream the reply for a nice UX
-    yield from stream_text(assistant_reply)
+    yield from stream_text(answer)
 
 def on_clear():
     # Optional hook when the user clicks Clear — here we do nothing.
@@ -118,6 +168,25 @@ A minimal chatbot UI built with **Gradio**.
 - Handy commands: `/help`, `/time`, `/echo`
         """
     )
+
+    # Status area
+    with gr.Row():
+        status_text = gr.Textbox(value=get_backend_status_str(), label="Backend status", interactive=False)
+        refresh_btn = gr.Button("Refresh status")
+        reload_btn = gr.Button("Reload backend")
+
+    # wire up status buttons
+    refresh_btn.click(fn=read_backend_status, inputs=None, outputs=status_text)
+    reload_btn.click(fn=reload_backend_trigger, inputs=None, outputs=status_text)
+
+    # periodic auto-refresh (poll backend status every 2 seconds)
+    try:
+        status_interval = gr.Interval(interval=2)
+        # call read_backend_status on each tick and update the status textbox
+        status_interval.tick(fn=read_backend_status, inputs=None, outputs=status_text)
+    except Exception:
+        # If Interval API is unavailable in this Gradio version, ignore silently
+        pass
 
     chat = gr.ChatInterface(
         fn=bot_fn,
