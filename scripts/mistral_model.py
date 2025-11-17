@@ -1,36 +1,87 @@
 from functools import lru_cache
-from llama_cpp import Llama
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from peft import PeftModel
+
+# ---- CONFIG ----
+BASE_MODEL = "mistralai/Mistral-7B-Instruct-v0.3"
+ADAPTER_DIR = "../mistral-qlora-dmp-adapter/checkpoint-22"  # folder with adapter_model.safetensors, etc.
 
 
-def _build_mistral_model(model_name, quant_model_name, hf_token):
-    return Llama.from_pretrained( 
-        repo_id=model_name,
-        filename=quant_model_name,
-        n_ctx=4096,
-        n_batch=256,
-        n_threads=None,
-        n_gpu_layers=28,
-        main_gpu=0,
-        tensor_split=None,
-        hf_token=hf_token,
+def _build_mistral_model(
+    base_model_name: str = BASE_MODEL,
+    adapter_dir: str = ADAPTER_DIR,
+):
+    """
+    Load base Mistral in 4-bit and attach the LoRA adapter for Dizzi.
+    Returns (model, tokenizer).
+    """
+    # Tokenizer – use the one saved with the adapter (or fall back to base model)
+    tokenizer = AutoTokenizer.from_pretrained(adapter_dir or base_model_name)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "right"
+
+    # 4-bit quantization for 8 GB GPU
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_use_double_quant=True,
+        bnb_4bit_compute_dtype=torch.bfloat16,
+        bnb_4bit_quant_type="nf4",
     )
 
-@lru_cache(maxsize=1)
-def get_mistral_model(model_name, quant_model_name, hf_token=None):
-    # Cached once per process; subsequent calls reuse the same model instance
-    return _build_mistral_model(model_name, quant_model_name, hf_token)
+    # Base model in 4-bit
+    base_model = AutoModelForCausalLM.from_pretrained(
+        base_model_name,
+        quantization_config=bnb_config,
+        device_map="auto",
+    )
 
-def build_pipe(model: Llama):
+    # Attach LoRA adapter (Dizzi fine-tune)
+    model = PeftModel.from_pretrained(
+        base_model,
+        adapter_dir,
+    )
+
+    model.eval()
+    return model, tokenizer
+
+
+@lru_cache(maxsize=1)
+def get_mistral_model(
+    base_model_name: str = BASE_MODEL,
+    adapter_dir: str = ADAPTER_DIR,
+):
+    """
+    Cached once per process; returns (model, tokenizer).
+    """
+    return _build_mistral_model(base_model_name, adapter_dir)
+
+
+def build_pipe(model_and_tokenizer):
+    """
+    Build a callable that matches your old interface:
+    pipe(prompt) -> [{"generated_text": full_text}]
+    """
+    model, tokenizer = model_and_tokenizer
+
     def _pipe(prompt: str):
-        out = model.create_completion(
-                    prompt=prompt,
-                    max_tokens=512,
-                    temperature=0.2,
-                    top_p=0.9,
-                    repeat_penalty=1.1,
-                )
-        text = out["choices"][0]["text"]
-        return [{"generated_text": prompt + text}]
+        inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+
+        with torch.no_grad():
+            outputs = model.generate(
+                **inputs,
+                max_new_tokens=512,
+                temperature=0.2,
+                top_p=0.9,
+                do_sample=True,
+                repetition_penalty=1.1,
+                pad_token_id=tokenizer.eos_token_id,
+            )
+
+        full_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        return [{"generated_text": full_text}]
+
     return _pipe
 
 def generate_answer(query, vector_store, mistral_pipe):
