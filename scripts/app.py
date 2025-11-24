@@ -42,7 +42,7 @@ def load_backend():
         combined_chunks, vector_store = preprocess_data()
 
         _set_status("loading_model", "Loading Mistral model...")
-        mistral_model = get_mistral_model(config.MODEL_NAME, config.QUANT_MODEL_NAME, config.HF_TOKEN)
+        mistral_model = get_mistral_model()
         mistral_pipe = build_pipe(mistral_model)
 
         _set_status("ready", "Backend ready")

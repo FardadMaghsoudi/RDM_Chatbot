@@ -1,11 +1,11 @@
 from functools import lru_cache
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-from peft import PeftModel
+from peft import PeftModel, get_peft_model
 
 # ---- CONFIG ----
 BASE_MODEL = "mistralai/Mistral-7B-Instruct-v0.3"
-ADAPTER_DIR = "../mistral-qlora-dmp-adapter/checkpoint-22"  # folder with adapter_model.safetensors, etc.
+ADAPTER_DIR = "../mistral-qlora-dmp"  # folder with adapter_model.safetensors, etc.
 
 
 def _build_mistral_model(
@@ -16,8 +16,8 @@ def _build_mistral_model(
     Load base Mistral in 4-bit and attach the LoRA adapter for Dizzi.
     Returns (model, tokenizer).
     """
-    # Tokenizer – use the one saved with the adapter (or fall back to base model)
-    tokenizer = AutoTokenizer.from_pretrained(adapter_dir or base_model_name)
+    # Tokenizer – use the one from base model
+    tokenizer = AutoTokenizer.from_pretrained(base_model_name)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "right"
@@ -37,11 +37,13 @@ def _build_mistral_model(
         device_map="auto",
     )
 
-    # Attach LoRA adapter (Dizzi fine-tune)
+    # Attach LoRA adapter
     model = PeftModel.from_pretrained(
         base_model,
         adapter_dir,
     )
+    
+    model.print_trainable_parameters()
 
     model.eval()
     return model, tokenizer
@@ -68,12 +70,12 @@ def build_pipe(model_and_tokenizer):
     def _pipe(prompt: str):
         inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
 
-        with torch.no_grad():
+        with torch.inference_mode():
             outputs = model.generate(
                 **inputs,
                 max_new_tokens=512,
-                temperature=0.2,
-                top_p=0.9,
+                temperature=0.7,
+                top_p=0.8,
                 do_sample=True,
                 repetition_penalty=1.1,
                 pad_token_id=tokenizer.eos_token_id,
@@ -88,14 +90,14 @@ def generate_answer(query, vector_store, mistral_pipe):
     docs = vector_store.similarity_search(query, k=2)
     chunks = [(getattr(d, "page_content", d) or "").strip() for d in docs]
     context = "\n\n".join(chunks)
-    prompt = f"""
+    prompt = f"""<s>
         You are Dizzi — a friendly and knowledgeable assistant for Research Data Management (RDM) at TU Delft. You are trained on TU Delft's official RDM guidelines, and you may also be provided with additional context below. Use markdown formatting for clarity, and keep responses concise yet informative.
 
         Your task is to:
         1. Start with general TU Delft RDM principles applicable to all researchers.
         2. Then ask the user which faculty, department, or role they belong to (e.g., PhD student in Aerospace, Data Steward in Applied Sciences).
         3. Once the user responds, tailor your advice using the provided context and your training to match their specific domain or role.
-        4. Where available, provide real and verifiable links to TU Delft or trusted sources for further reference.
+        4. Where available, provide real and verifiable links to TU Delft or trusted sources for further reference. Do not provide links which were not part of your training or part of the provided context.
 
         If a question is outside your knowledge or the provided context, say so clearly and do not make assumptions.
 
@@ -107,6 +109,6 @@ def generate_answer(query, vector_store, mistral_pipe):
         {query}
 
         Answer:
-        """
+        </s>"""
     result = mistral_pipe(prompt)[0]["generated_text"]
     return result.split("Answer:")[-1].strip() 
