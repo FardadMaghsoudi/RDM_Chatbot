@@ -65,7 +65,8 @@ def download_pdfs_from_webpage(url, download_folder="../policies/tudelft_policie
             if pdf_a:
                 pdf_href = pdf_a["href"]
                 if not pdf_href.startswith("http") and not pdf_href.startswith("https"):
-                    pdf_href = requests.compat.urljoin(zenodo_url, pdf_href)
+                    print(f"Found relative PDF link on Zenodo page: {pdf_href}")
+                    pdf_href = requests.compat.urljoin("https://zenodo.org", pdf_href)
                 filename = os.path.join(download_folder, os.path.basename(pdf_href.split("?")[0]))
                 if not os.path.exists(filename):
                     print(f"Downloading Zenodo PDF: {pdf_href}")
