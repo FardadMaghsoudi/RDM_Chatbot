@@ -1,13 +1,15 @@
 import requests
 from bs4 import BeautifulSoup
 from web_crawling import crawl_website
+from vector_store import clean_text
 import pickle
 import os
 
 def scrape_webpage(url):
     response = requests.get(url)
     soup = BeautifulSoup(response.content, "html.parser")
-    return soup.get_text()
+    text = soup.get_text()
+    return clean_text(text)
 
 def save_or_load_web_chunks(web_chunks_path, web_urls, split_text_func, web_crawling_func=crawl_website, scrape_webpage_func=scrape_webpage):
     if os.path.exists(web_chunks_path):

@@ -5,7 +5,9 @@ Test script to verify PDF downloading, text extraction, and pickle saving.
 
 import os
 import pickle
-from pdf_utils import download_pdfs_from_webpage, load_all_pdfs, save_or_load_pdf_text
+import tempfile
+import shutil
+from pdf_utils import download_pdfs_from_webpage, load_all_pdfs, save_or_load_pdf_chunks
 
 def test_pdf_download_and_processing():
     print("=" * 80)
@@ -123,26 +125,7 @@ def test_pdf_download_and_processing():
         print(f"✗ Error with pickle operations: {e}")
         return
     
-    # Step 4: Test the save_or_load_pdf_text utility function
-    print("\n4. Testing save_or_load_pdf_text utility function...")
-    util_pickle_path = "./test_pdf_text_util.pkl"
     
-    try:
-        # First call - should create pickle
-        text1 = save_or_load_pdf_text(util_pickle_path, download_folder)
-        print(f"✓ First call (created pickle): {len(text1):,} characters")
-        
-        # Second call - should load from pickle
-        text2 = save_or_load_pdf_text(util_pickle_path, download_folder)
-        print(f"✓ Second call (loaded pickle): {len(text2):,} characters")
-        
-        if text1 == text2:
-            print(f"✓ Utility function working correctly - both calls returned same data")
-        else:
-            print(f"✗ Utility function mismatch!")
-    except Exception as e:
-        print(f"✗ Error testing utility function: {e}")
-        return
     
     print("\n" + "=" * 80)
     print("All tests completed successfully! ✓")
@@ -152,9 +135,60 @@ def test_pdf_download_and_processing():
     print("\nTest artifacts created:")
     print(f"  - {download_folder}/ (downloaded PDFs)")
     print(f"  - {pickle_path} (pickle test)")
-    print(f"  - {util_pickle_path} (utility function test)")
     print("\nTo clean up test files, run:")
-    print(f"  rm -rf {download_folder} {pickle_path} {util_pickle_path}")
+    print(f"  rm -rf {download_folder} {pickle_path}")
+
+
+def simple_split_text(text, chunk_size=500):
+    chunks = []
+    for i in range(0, len(text), chunk_size):
+        chunks.append(text[i:i+chunk_size])
+    if not chunks:
+        chunks.append("")
+    return chunks
+
+
+def test_save_or_load_pdf_chunks():
+    print("=" * 80)
+    print("Testing save_or_load_pdf_chunks (no download required)")
+    print("=" * 80)
+
+    temp_dir = tempfile.mkdtemp(prefix="pdf_chunks_test_")
+    pdf_chunks_path = os.path.join(temp_dir, "pdf_chunks.pkl")
+
+    try:
+        # First call should create the pickle after processing the (empty) folder
+        print("\n1. First call - creating pickle from empty folder...")
+        chunks_first = save_or_load_pdf_chunks(pdf_chunks_path, temp_dir, simple_split_text)
+        print(f"  ✓ Returned {len(chunks_first)} chunk(s)")
+
+        if os.path.exists(pdf_chunks_path):
+            size_bytes = os.path.getsize(pdf_chunks_path)
+            print(f"  ✓ Pickle created at {pdf_chunks_path} ({size_bytes} bytes)")
+        else:
+            print("  ✗ Pickle file was not created")
+            return
+
+        # Second call should load directly from the pickle without re-processing
+        print("\n2. Second call - loading from existing pickle...")
+        chunks_second = save_or_load_pdf_chunks(pdf_chunks_path, temp_dir, simple_split_text)
+        print(f"  ✓ Loaded {len(chunks_second)} chunk(s) from pickle")
+
+        if chunks_first == chunks_second:
+            print("  ✓ Chunks match between first and second calls")
+        else:
+            print("  ✗ Chunks mismatch between first and second calls")
+            return
+
+    except Exception as e:
+        print(f"✗ Error testing save_or_load_pdf_chunks: {e}")
+        import traceback
+        traceback.print_exc()
+        return
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        print(f"\nCleaned up temp directory: {temp_dir}")
 
 if __name__ == "__main__":
+    test_save_or_load_pdf_chunks()
     test_pdf_download_and_processing()
