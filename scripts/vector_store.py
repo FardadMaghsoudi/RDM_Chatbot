@@ -1,3 +1,7 @@
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
+
 def split_text(text, chunk_size=500, overlap=50):
     chunks = []
     start = 0
@@ -6,10 +10,6 @@ def split_text(text, chunk_size=500, overlap=50):
         chunks.append(text[start:end])
         start = end - overlap
     return chunks
-
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
-import numpy as np
 
 class SimpleVectorStore:
     def __init__(self, texts):
