@@ -18,13 +18,13 @@ def preprocess_data():
     # Scrape web pages and split text (with intermediate saving/loading)
     print("Scraping web pages...")
     web_chunks = save_or_load_web_chunks(config.WEB_CHUNKS_PATH, config.WEB_URLS, split_text_by_sentences)
+    
     print("Creating vector store...")
     combined_chunks = pdf_chunks + web_chunks
     vector_store = SimpleVectorStore(combined_chunks)
     return combined_chunks, vector_store 
 
 if __name__ == "__main__":
-    preprocess_data()
     cc, vs = preprocess_data()
     print(f"Total chunks processed: {len(cc)}")
     # Test similarity search
