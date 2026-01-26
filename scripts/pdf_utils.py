@@ -43,11 +43,13 @@ def load_pdf_text(pdf_path, header_margin=60, footer_margin=50):
 def load_all_pdfs(folder_path):
     all_text = []
     for root, dirs, files in os.walk(folder_path):
+        print(f"Number of files in folder: {len(files)}")
         for filename in files:
             if filename.endswith(".pdf"):
                 full_path = os.path.join(root, filename)
                 raw_text = load_pdf_text(full_path)
                 if raw_text:
+                    print(f"Found text in {filename}")
                     all_text.append(raw_text)
 
     return all_text

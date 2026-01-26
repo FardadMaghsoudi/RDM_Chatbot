@@ -20,7 +20,7 @@ def preprocess_data():
     web_chunks = save_or_load_web_chunks(config.WEB_CHUNKS_PATH, config.WEB_URLS, split_text_by_sentences)
     
     print("Creating vector store...")
-    combined_chunks = pdf_chunks + web_chunks
+    combined_chunks = web_chunks + pdf_chunks
     vector_store = SimpleVectorStore(combined_chunks)
     return combined_chunks, vector_store 
 
