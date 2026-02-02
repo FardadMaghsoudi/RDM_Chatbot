@@ -160,7 +160,7 @@ class SimpleVectorStore:
         self.model = SentenceTransformer("all-MiniLM-L6-v2")
         self.embeddings = self.model.encode(texts)
 
-    def similarity_search(self, query, k=4):
+    def similarity_search(self, query, k=2):
         chunked_query = split_text_by_sentences(query)
         query_vec = self.model.encode(chunked_query)
         sims = cosine_similarity(query_vec, self.embeddings)

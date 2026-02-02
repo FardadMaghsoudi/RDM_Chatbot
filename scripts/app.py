@@ -1,29 +1,38 @@
 from __future__ import annotations
 import os
 import time
+import threading
 from datetime import datetime
-from typing import List, Dict, Any, Optional
-
+from typing import List
+import queue
 import gradio as gr
 import config
 from mistral_model import get_mistral_model, build_pipe, generate_answer
 from data_preprocessing import preprocess_data
 
 from dotenv import load_dotenv
-load_dotenv()  # take environment variables from .env.
+load_dotenv()
 
-# --- Backend loading state (will be populated by background loader) ---
-import threading
-
-# shared state for loader and UI
+# --- Backend loading state ---
 backend_status = {"state": "starting", "message": "starting up"}
 status_lock = threading.Lock()
 
-# placeholders for resources filled by the loader thread
+# placeholders
 combined_chunks = None
 vector_store = None
 mistral_model = None
 mistral_pipe = None
+
+WELCOME_MESSAGE = """\
+**Hello! I am Dizzy.** 🤖
+
+I am your TU Delft RDM assistant. I can help you with:
+* Data Management Plans (DMPs)
+* Storage & Security policies
+* Archiving & Publishing data
+
+*How can I assist you today?*
+"""
 
 def _set_status(state: str, message: str = ""):
     with status_lock:
@@ -35,170 +44,170 @@ def get_backend_status_str() -> str:
         return f"{backend_status.get('state')} - {backend_status.get('message', '')}"
 
 def load_backend():
-    """Load preprocessing and model in background to avoid blocking the UI startup."""
+    """Load preprocessing and model in background."""
     global combined_chunks, vector_store, mistral_model, mistral_pipe
     try:
-        _set_status("loading_preprocess", "Preprocessing data and building vector store...")
+        _set_status("loading_preprocess", "Preprocessing data...")
         combined_chunks, vector_store = preprocess_data()
+        #time.sleep(2) # Fake delay for demonstration
 
         _set_status("loading_model", "Loading Mistral model...")
         mistral_model = get_mistral_model()
         mistral_pipe = build_pipe(mistral_model)
+        #time.sleep(2) # Fake delay for demonstration
 
         _set_status("ready", "Backend ready")
     except Exception as e:
         _set_status("error", f"{type(e).__name__}: {e}")
 
-# start loader in background so Gradio UI can come up immediately
+# Start loader immediately
 loader_thread = threading.Thread(target=load_backend, daemon=True)
 loader_thread.start()
 
 HELP_TEXT = """\
-**Dizzi commands**
+**Dizzy commands**
 - `/help` – show this help
 - `/time` – current server time
-- `/echo some text` – echo back text
+- `/echo` – echo back text
 """
 
-def stream_text(text: str, chunk_size: int = 10):
-    """Yield text in larger chunks to improve visibility during streaming."""
-    for i in range(0, len(text), chunk_size):
-        yield text[:i + chunk_size]
-        time.sleep(0.1)  # slightly longer delay for better effect
-
-#def small_talk_response(message: str) -> Optional[str]:
-#    """Tiny rule-based responses just for demo polish."""
-#    lower = message.lower().strip()
-#    if any(g in lower for g in ("hello", "hi", "hey")):
-#        return "Hey! 👋 How can I help?"
-#    if "thank" in lower:
-#        return "You’re welcome! 😊"
-#    if "name" in lower and "your" in lower:
-#        return "I’m **DemoBot**. Nice to meet you!"
-#    return None
-
-def reload_backend_trigger() -> str:
-    """Trigger a reload of the backend in the background (if not already loading).
-    Returns the new status string immediately."""
-    with status_lock:
-        state = backend_status.get("state")
-        if state in ("loading_preprocess", "loading_model"):
-            return get_backend_status_str()
-        # mark as reloading and start a new loader thread
-        backend_status["state"] = "reloading"
-        backend_status["message"] = "User triggered reload"
-
-    t = threading.Thread(target=load_backend, daemon=True)
-    t.start()
-    return get_backend_status_str()
-
-def read_backend_status() -> str:
-    return get_backend_status_str()
-
-def bot_fn(
-    message: gr.ChatMessage, history: List[gr.ChatMessage]
-):
-    """
-    Gradio ChatInterface handler.
-    - message: the latest user message (with optional files)
-    - history: list of prior ChatMessage objects (role='user'|'assistant')
-    """
-    # Normalize the incoming message into a plain string (supports str, dict, ChatMessage-like)
-    # print(type(message), message)
-    if isinstance(message, str):
-        user_text = message.strip()
-    elif isinstance(message, dict):
-        user_text = (message.get("content") or "").strip()
-    elif hasattr(message, "content"):
-        user_text = (getattr(message, "content") or "").strip()
-    else:
-        user_text = str(message or "").strip()
+def generate_response(message: str):
+    user_text = message.strip()
 
     # Commands
     if user_text.startswith("/help"):
-        yield gr.ChatMessage(role="assistant", content=HELP_TEXT)
-        return
-
+        return HELP_TEXT
     if user_text.startswith("/time"):
-        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        yield gr.ChatMessage(role="assistant", content=f"Server time: **{now}**")
-        return
-
+        return f"Server time: **{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}**"
     if user_text.startswith("/echo"):
-        echoed = user_text[len("/echo"):].strip() or "…(nothing to echo)"
-        yield gr.ChatMessage(role="assistant", content=echoed)
-        return
+        return user_text[len("/echo"):].strip() or "…(nothing to echo)"
 
-    # Tiny rule-based small talk first
-    #canned = small_talk_response(user_text)
-    #if canned:
-    #    yield gr.ChatMessage(role="assistant", content=canned)
-    #    return
-
-    # Ensure the backend is ready before attempting generation
+    # Backend check
     with status_lock:
         curr_state = backend_status.get("state")
     if curr_state != "ready":
-        yield gr.ChatMessage(role="assistant", content=f"Backend not ready: {get_backend_status_str()}")
-        return
+        return f"Backend not ready: {get_backend_status_str()}"
 
+    # Real Generation
     try:
         answer = generate_answer(user_text, vector_store, mistral_pipe)
+        #answer = f"Simulated answer to: {user_text}" # Placeholder
+        return answer
     except Exception as e:
-        # Surface an error message to the user rather than crashing the UI
-        yield gr.ChatMessage(role="assistant", content=f"Error generating answer: {type(e).__name__}: {e}")
-        return
+        return f"Error: {type(e).__name__}: {e}"
 
-    # Stream the reply for a nice UX
-    yield from stream_text(answer)
+def chat_fn(message: str, history: List[gr.ChatMessage]):
+    # 1. Append User Message
+    history.append(gr.ChatMessage(role="user", content=message))
+    yield "", history  # Clear input box immediately
 
-def on_clear():
-    # Optional hook when the user clicks Clear — here we do nothing.
-    return None
-
-with gr.Blocks(title="Dizzi — Gradio Chatbot", theme=gr.themes.Soft()) as demo:
-    gr.Markdown(
-        """
-# 🤖 Dizzy
-A minimal chatbot UI built with **Gradio**.
-
-- Supports message history & markdown
-- Streams responses
-- Accepts file uploads
-- Handy commands: `/help`, `/time`, `/echo`
-        """
+    result_queue = queue.Queue()
+    
+    # Run the heavy generation in a separate thread
+    gen_thread = threading.Thread(
+        target=lambda: result_queue.put(generate_response(message))
     )
+    gen_thread.start()
 
-    # Status area
+    start_time = time.time()
+    
+    # 3. Live Timer Loop
+    # While the thread is running, we update the UI every 0.2 seconds
+    while gen_thread.is_alive():
+        elapsed = time.time() - start_time
+        
+        # Create a temporary loading message
+        loading_msg = gr.ChatMessage(
+            role="assistant", 
+            content=f"🧠 *Thinking...* ({elapsed:.1f}s)"
+        )
+        
+        # Add it, yield, then remove it so it updates in place
+        history.append(loading_msg)
+        yield "", history
+        history.pop() # Remove it so we don't get a list of "Thinking 1s, Thinking 2s..."
+        
+        time.sleep(0.2) # Update rate
+
+    # 4. Final Processing
+    gen_thread.join() # Ensure thread is done
+    raw_response = result_queue.get()
+    
+    total_time = time.time() - start_time
+    
+    # Add the finalized message with total time
+    final_content = f"{raw_response}\n\n_Generated in {total_time:.2f}s_"
+    history.append(gr.ChatMessage(role="assistant", content=final_content))
+    yield "", history
+
+def check_status_and_update_ui():
+    """
+    Called by Timer.
+    Updates the Status Textbox AND enables/disables the Chat Input.
+    """
+    current_status = get_backend_status_str()
+    is_ready = backend_status.get("state") == "ready"
+    
+    # Configure the input box based on status
+    if is_ready:
+        # We assume status text is hidden or minimal once ready, 
+        # but here we keep updating it just so you know it's working.
+        input_update = gr.Textbox(interactive=True, placeholder="Type a message...")
+    else:
+        input_update = gr.Textbox(interactive=False, placeholder=f"System loading... ({current_status})")
+        
+    return current_status, input_update
+
+def reset_chat():
+    """Returns the chat history reset to just the welcome message."""
+    return [gr.ChatMessage(role="assistant", content=WELCOME_MESSAGE)]
+
+# --- UI Definition ---
+with gr.Blocks(title="Dizzi", theme=gr.themes.Soft()) as demo:
+    gr.Markdown("# 🤖 Dizzy")
+
+    # Clean UI: Just the chat and a status indicator
     with gr.Row():
-        status_text = gr.Textbox(value=read_backend_status(), label="Backend status", interactive=False)
-        refresh_btn = gr.Button("Refresh status")
-        reload_btn = gr.Button("Reload backend")
+        # Interactive=False means user can't type in it, it's just for display
+        status_display = gr.Textbox(label="System Status", interactive=False)
 
-    # wire up status buttons
-    refresh_btn.click(fn=read_backend_status, inputs=None, outputs=status_text)
-    reload_btn.click(fn=reload_backend_trigger, inputs=None, outputs=status_text)
-
-    # Periodically refresh backend status every 1 second
-    status_timer = gr.Timer(1.0)  # interval in seconds
-    status_timer.tick(fn=read_backend_status, inputs=None, outputs=status_text)
-
-    chat = gr.ChatInterface(
-        fn=bot_fn,
-        type="messages",                 # use structured ChatMessage objects
-        cache_examples=False,
-        save_history=True,
-        chatbot=gr.Chatbot(
-            type="messages",
-            show_copy_button=True,
-            avatar_images=(None, None),   # set custom avatar image paths if you like
-            height=500,
-        ),
+    chatbot = gr.Chatbot(
+        value=reset_chat(),
+        type="messages", 
+        height=500, 
+        show_copy_button=True
     )
+    
+    # Input Area (Started as Disabled)
+    chat_input = gr.Textbox(
+        interactive=False, 
+        placeholder="Initializing system...", 
+        show_label=False,
+        autofocus=True
+    )
+    
+    clear_btn = gr.Button("Clear Chat")
 
-    # Optional: respond to Clear button
-    chat.clear()
+    # --- Wiring ---
+
+    # 1. Chat Submission
+    msg_event = chat_input.submit(
+        fn=chat_fn, 
+        inputs=[chat_input, chatbot], 
+        outputs=[chat_input, chatbot]
+    )
+    
+    # 2. Clear History
+    clear_btn.click(fn=reset_chat, inputs=None, outputs=chatbot, queue=False)
+
+    # 3. Timer: Updates Status text AND enables Chat Input when ready
+    # This replaces the need for a manual "Refresh" button
+    timer = gr.Timer(1.0)
+    timer.tick(
+        fn=check_status_and_update_ui, 
+        inputs=[], 
+        outputs=[status_display, chat_input]
+    )
 
 if __name__ == "__main__":
-    # share=True if you want a temporary public link
-    demo.launch(share=os.environ.get("GRADIO_SHARE", "false") in ("1", "true", "yes"))
+    demo.launch()
