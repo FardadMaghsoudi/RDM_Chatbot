@@ -66,16 +66,16 @@ def stream_text(text: str, chunk_size: int = 10):
         yield text[:i + chunk_size]
         time.sleep(0.1)  # slightly longer delay for better effect
 
-def small_talk_response(message: str) -> Optional[str]:
-    """Tiny rule-based responses just for demo polish."""
-    lower = message.lower().strip()
-    if any(g in lower for g in ("hello", "hi", "hey")):
-        return "Hey! 👋 How can I help?"
-    if "thank" in lower:
-        return "You’re welcome! 😊"
-    if "name" in lower and "your" in lower:
-        return "I’m **DemoBot**. Nice to meet you!"
-    return None
+#def small_talk_response(message: str) -> Optional[str]:
+#    """Tiny rule-based responses just for demo polish."""
+#    lower = message.lower().strip()
+#    if any(g in lower for g in ("hello", "hi", "hey")):
+#        return "Hey! 👋 How can I help?"
+#    if "thank" in lower:
+#        return "You’re welcome! 😊"
+#    if "name" in lower and "your" in lower:
+#        return "I’m **DemoBot**. Nice to meet you!"
+#    return None
 
 def reload_backend_trigger() -> str:
     """Trigger a reload of the backend in the background (if not already loading).
@@ -130,10 +130,10 @@ def bot_fn(
         return
 
     # Tiny rule-based small talk first
-    canned = small_talk_response(user_text)
-    if canned:
-        yield gr.ChatMessage(role="assistant", content=canned)
-        return
+    #canned = small_talk_response(user_text)
+    #if canned:
+    #    yield gr.ChatMessage(role="assistant", content=canned)
+    #    return
 
     # Ensure the backend is ready before attempting generation
     with status_lock:
@@ -159,7 +159,7 @@ def on_clear():
 with gr.Blocks(title="Dizzi — Gradio Chatbot", theme=gr.themes.Soft()) as demo:
     gr.Markdown(
         """
-# 🤖 Dizzi
+# 🤖 Dizzy
 A minimal chatbot UI built with **Gradio**.
 
 - Supports message history & markdown

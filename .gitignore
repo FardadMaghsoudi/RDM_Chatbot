@@ -4,5 +4,7 @@ scripts/__pycache__/
 .DS_Store
 scripts/*.log
 scripts/.gradio/
+.gradio/
 mistral-qlora-dmp/
+*.log
 
