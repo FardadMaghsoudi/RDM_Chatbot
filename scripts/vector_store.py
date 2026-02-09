@@ -158,11 +158,11 @@ class SimpleVectorStore:
     def __init__(self, texts):
         self.texts = texts
         self.model = SentenceTransformer("all-MiniLM-L6-v2")
-        self.embeddings = self.model.encode(texts)
+        self.embeddings = self.model.encode(texts, normalize_embeddings=True)
 
     def similarity_search(self, query, k=2):
         chunked_query = split_text_by_sentences(query)
-        query_vec = self.model.encode(chunked_query)
+        query_vec = self.model.encode(chunked_query, normalize_embeddings=True)
         sims = cosine_similarity(query_vec, self.embeddings)
         aggregated = np.max(sims, axis=0)
         top_k_idx = np.argsort(aggregated)[::-1][:k]
