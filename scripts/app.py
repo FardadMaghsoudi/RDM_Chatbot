@@ -7,7 +7,7 @@ from typing import List
 import queue
 import gradio as gr
 import config
-from mistral_model import get_mistral_model, build_pipe, generate_answer
+from mistral_model import get_mistral_model, generate_answer
 from data_preprocessing import preprocess_data
 
 from dotenv import load_dotenv
@@ -21,7 +21,6 @@ status_lock = threading.Lock()
 combined_chunks = None
 vector_store = None
 mistral_model = None
-mistral_pipe = None
 
 WELCOME_MESSAGE = """\
 **Hello! I am Dizzy.** 🤖
@@ -45,7 +44,7 @@ def get_backend_status_str() -> str:
 
 def load_backend():
     """Load preprocessing and model in background."""
-    global combined_chunks, vector_store, mistral_model, mistral_pipe
+    global combined_chunks, vector_store, mistral_model
     try:
         _set_status("loading_preprocess", "Preprocessing data...")
         combined_chunks, vector_store = preprocess_data()
@@ -53,7 +52,6 @@ def load_backend():
 
         _set_status("loading_model", "Loading Mistral model...")
         mistral_model = get_mistral_model()
-        mistral_pipe = build_pipe(mistral_model)
         #time.sleep(2) # Fake delay for demonstration
 
         _set_status("ready", "Backend ready")
@@ -90,7 +88,7 @@ def generate_response(message: str):
 
     # Real Generation
     try:
-        answer = generate_answer(user_text, vector_store, mistral_pipe)
+        answer = generate_answer(user_text, vector_store, mistral_model)
         #answer = f"Simulated answer to: {user_text}" # Placeholder
         return answer
     except Exception as e:
@@ -183,7 +181,6 @@ with gr.Blocks(title="Dizzi", theme=gr.themes.Soft()) as demo:
         interactive=False, 
         placeholder="Initializing system...", 
         show_label=False,
-        autofocus=True
     )
     
     clear_btn = gr.Button("Clear Chat")
