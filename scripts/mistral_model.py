@@ -87,7 +87,7 @@ def build_pipe(model_and_tokenizer):
     return _pipe
 
 def generate_answer(query, vector_store, mistral_pipe):
-    docs = vector_store.similarity_search(query, k=3)
+    docs = vector_store.similarity_search(query, k=10)
     chunks = [(getattr(d, "page_content", d) or "").strip() for d in docs]
     context = "\n\n".join(chunks)
     prompt = f"""<s>

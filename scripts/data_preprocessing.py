@@ -1,4 +1,5 @@
 import os
+import time
 from vector_store import split_text, SimpleVectorStore, split_text_by_sentences
 from pdf_utils import save_or_load_pdf_chunks, download_pdfs_from_webpage
 from web_utils import save_or_load_web_chunks
@@ -30,7 +31,11 @@ if __name__ == "__main__":
     # Test similarity search
     query = "What are the data management policies at TU Delft?"
     print(f"Performing similarity search for query: '{query}'")
-    results = vs.similarity_search(query, k=3)
+    start_time = time.time()
+    results = vs.similarity_search(query, k=10)
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print(f"Search completed in {elapsed_time:.4f} seconds for 10 neighbours.")
     print("Top 3 similar chunks:")
     for i, res in enumerate(results, 1):
         print(f"{i}. {res}...")  # Print first 200 characters of each chunk

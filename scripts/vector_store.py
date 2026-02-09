@@ -4,6 +4,7 @@ import numpy as np
 import re
 import html
 import unicodedata
+import faiss
 from collections import Counter
 
 def clean_text(text):
@@ -159,11 +160,13 @@ class SimpleVectorStore:
         self.texts = texts
         self.model = SentenceTransformer("all-MiniLM-L6-v2")
         self.embeddings = self.model.encode(texts, normalize_embeddings=True)
+        self.dimension = self.embeddings.shape[1]
+        self.index = faiss.IndexFlatIP(self.dimension)
+        self.index.add(self.embeddings)
 
-    def similarity_search(self, query, k=2):
-        chunked_query = split_text_by_sentences(query)
-        query_vec = self.model.encode(chunked_query, normalize_embeddings=True)
-        sims = cosine_similarity(query_vec, self.embeddings)
-        aggregated = np.max(sims, axis=0)
-        top_k_idx = np.argsort(aggregated)[::-1][:k]
-        return [self.texts[i] for i in top_k_idx] 
+    def similarity_search(self, query, k=10):
+        query_vec = self.model.encode([query], normalize_embeddings=True)
+        # D represents distances (similarity scores), I represents indices
+        D, I = self.index.search(query_vec, k)
+        # Retrieve texts based on the indices returned by Faiss
+        return [self.texts[i] for i in I[0]]
