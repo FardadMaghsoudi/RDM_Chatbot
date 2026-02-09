@@ -94,14 +94,24 @@ def generate_response(message: str):
     except Exception as e:
         return f"Error: {type(e).__name__}: {e}"
 
-def chat_fn(message: str, history: List[gr.ChatMessage]):
+
+def clear_and_lock_input(message):
+    """Immediately clears the input and stops user from typing during generation."""
+    return gr.update(value="", interactive=False), message
+
+def unlock_input():
+    """Re-enables the input box once the answer is ready."""
+    return gr.update(interactive=True, placeholder="Type a message...")
+
+def chat_generation_loop(message: str, history: List[gr.ChatMessage]):
+    """Handles the thinking loop and chatbot updates ONLY."""
     # 1. Append User Message
     history.append(gr.ChatMessage(role="user", content=message))
-    yield "", history  # Clear input box immediately
+    yield history 
 
     result_queue = queue.Queue()
     
-    # Run the heavy generation in a separate thread
+    # Run heavy generation in thread
     gen_thread = threading.Thread(
         target=lambda: result_queue.put(generate_response(message))
     )
@@ -109,34 +119,27 @@ def chat_fn(message: str, history: List[gr.ChatMessage]):
 
     start_time = time.time()
     
-    # 3. Live Timer Loop
-    # While the thread is running, we update the UI every 0.2 seconds
+    # 2. Live Timer Loop (Now only targeting the chatbot)
     while gen_thread.is_alive():
         elapsed = time.time() - start_time
-        
-        # Create a temporary loading message
         loading_msg = gr.ChatMessage(
             role="assistant", 
             content=f"🧠 *Thinking...* ({elapsed:.1f}s)"
         )
         
-        # Add it, yield, then remove it so it updates in place
         history.append(loading_msg)
-        yield "", history
-        history.pop() # Remove it so we don't get a list of "Thinking 1s, Thinking 2s..."
-        
-        time.sleep(0.2) # Update rate
+        yield history # No input box yielded here = no flicker
+        history.pop() 
+        time.sleep(0.2)
 
-    # 4. Final Processing
-    gen_thread.join() # Ensure thread is done
+    # 3. Final Processing
+    gen_thread.join()
     raw_response = result_queue.get()
-    
     total_time = time.time() - start_time
     
-    # Add the finalized message with total time
     final_content = f"{raw_response}\n\n_Generated in {total_time:.2f}s_"
     history.append(gr.ChatMessage(role="assistant", content=final_content))
-    yield "", history
+    yield history
 
 def check_status_and_update_ui():
     """
@@ -185,15 +188,26 @@ with gr.Blocks(title="Dizzi", theme=gr.themes.Soft()) as demo:
     
     clear_btn = gr.Button("Clear Chat")
 
+    saved_msg = gr.State()
+
     # --- Wiring ---
 
     # 1. Chat Submission
     msg_event = chat_input.submit(
-        fn=chat_fn, 
-        inputs=[chat_input, chatbot], 
-        outputs=[chat_input, chatbot]
+        fn=clear_and_lock_input,
+        inputs=[chat_input],
+        outputs=[chat_input, saved_msg],
+        queue=False 
+    ).then(
+        fn=chat_generation_loop,
+        inputs=[saved_msg, chatbot],
+        outputs=chatbot
+    ).then(
+        fn=unlock_input,
+        inputs=None,
+        outputs=chat_input
     )
-    
+
     # 2. Clear History
     clear_btn.click(fn=reset_chat, inputs=None, outputs=chatbot, queue=False)
 

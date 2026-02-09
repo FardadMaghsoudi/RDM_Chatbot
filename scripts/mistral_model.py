@@ -43,6 +43,8 @@ def _build_mistral_model(
         base_model,
         adapter_dir,
     )
+    model = model.merge_and_unload()
+    model = torch.compile(model)
     
 #    model.print_trainable_parameters()
 
@@ -63,7 +65,7 @@ def get_mistral_model(
 
 def generate_answer(query, vector_store, model_and_tokenizer):
     model, tokenizer = model_and_tokenizer
-    docs = vector_store.similarity_search(query, k=10)
+    docs = vector_store.similarity_search(query, k=5)
     chunks = [d if isinstance(d, str) else d.page_content for d in docs]
     context = "\n---\n".join(chunks)
 
@@ -85,7 +87,7 @@ def generate_answer(query, vector_store, model_and_tokenizer):
     with torch.inference_mode():
         outputs = model.generate(
             **inputs,
-            max_new_tokens=512,      # Lower limit prevents run-on hallucinations
+            max_new_tokens=1024,      # Lower limit prevents run-on hallucinations
             do_sample=True,
             temperature=0.9,
             top_p=0.9,
