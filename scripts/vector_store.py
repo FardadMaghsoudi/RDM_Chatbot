@@ -90,7 +90,7 @@ def split_into_sentences(text):
     sentences = sentence_endings.split(text)
     return [s.strip() for s in sentences if s.strip()]
 
-def split_text(text, chunk_size=1500, overlap=200):
+def split_text(text, chunk_size=1000, overlap=200):
     text = clean_text(text)
     chunks = []
     start = 0
@@ -100,13 +100,13 @@ def split_text(text, chunk_size=1500, overlap=200):
         start = end - overlap
     return chunks
 
-def split_text_by_sentences(text, target_chunk_size=1500, overlap_size=200):
+def split_text_by_sentences(text, target_chunk_size=1000, overlap_size=200):
     """
     Split text into chunks by complete sentences, preserving sentence boundaries.
     
     Args:
         text: The text to chunk
-        target_chunk_size: Target size in characters (default: 1200)
+        target_chunk_size: Target size in characters (default: 1000)
         overlap_size: Overlap between chunks in characters (default: 200)
     
     Returns:
@@ -164,7 +164,7 @@ class SimpleVectorStore:
         self.index = faiss.IndexFlatIP(self.dimension)
         self.index.add(self.embeddings)
 
-    def similarity_search(self, query, k=10):
+    def similarity_search(self, query, k=5):
         query_vec = self.model.encode([query], normalize_embeddings=True)
         # D represents distances (similarity scores), I represents indices
         D, I = self.index.search(query_vec, k)

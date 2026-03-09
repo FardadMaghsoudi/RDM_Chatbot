@@ -7,4 +7,6 @@ scripts/.gradio/
 .gradio/
 mistral-qlora-dmp/
 *.log
+wandb/
+results/
 
