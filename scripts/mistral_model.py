@@ -29,7 +29,9 @@ def _build_mistral_model(
         bnb_4bit_compute_dtype=torch.bfloat16,
         bnb_4bit_quant_type="nf4",
     )
-
+    
+    base_model = Mistral3ForConditionalGeneration.from_pretrained(
+        base_model_name,
         quantization_config=bnb_config,
         device_map="auto",
         attn_implementation="sdpa",
