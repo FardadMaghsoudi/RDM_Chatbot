@@ -1,26 +1,41 @@
 import os
-from vector_store import split_text, SimpleVectorStore
-from pdf_utils import save_or_load_pdf_text, save_or_load_pdf_chunks
-from web_utils import scrape_webpage, save_or_load_web_chunks
+import time
+from vector_store import split_text, SimpleVectorStore, split_text_by_sentences
+from pdf_utils import save_or_load_pdf_chunks, download_pdfs_from_webpage
+from web_utils import save_or_load_web_chunks
 import config
 
 def preprocess_data():
-#    NOTE: Uncomment the next line if you want to download PDFs again
-#   pdf_folder = download_pdfs_from_webpage(config.POLICIES_URL, config.PDF_FOLDER)
+    # NOTE: Uncomment the next line if you want to download PDFs again
+    # download_pdfs_from_webpage(config.POLICIES_URL, config.PDF_FOLDER)
 
     # Ensure preprocessed-data directory exists
     os.makedirs(config.PREPROCESSED_DATA_DIR, exist_ok=True)
 
     # Load PDFs and split text (with intermediate saving/loading)
     print("Loading PDFs...")
-    pdf_text = save_or_load_pdf_text(config.PDF_TEXT_PATH, config.PDF_FOLDER)
-    pdf_chunks = save_or_load_pdf_chunks(config.PDF_CHUNKS_PATH, pdf_text, split_text)
+    pdf_chunks = save_or_load_pdf_chunks(config.PDF_CHUNKS_PATH, config.PDF_FOLDER, split_text_by_sentences)
 
     # Scrape web pages and split text (with intermediate saving/loading)
     print("Scraping web pages...")
-    web_chunks = save_or_load_web_chunks(config.WEB_CHUNKS_PATH, config.WEB_URLS, split_text, scrape_webpage)
-
+    web_chunks = save_or_load_web_chunks(config.WEB_CHUNKS_PATH, config.WEB_URLS, split_text_by_sentences)
+    
     print("Creating vector store...")
-    combined_chunks = pdf_chunks + web_chunks
+    combined_chunks = web_chunks + pdf_chunks
     vector_store = SimpleVectorStore(combined_chunks)
     return combined_chunks, vector_store 
+
+if __name__ == "__main__":
+    cc, vs = preprocess_data()
+    print(f"Total chunks processed: {len(cc)}")
+    # Test similarity search
+    query = "What are the data management policies at TU Delft?"
+    print(f"Performing similarity search for query: '{query}'")
+    start_time = time.time()
+    results = vs.similarity_search(query, k=10)
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print(f"Search completed in {elapsed_time:.4f} seconds for 10 neighbours.")
+    print("Top 3 similar chunks:")
+    for i, res in enumerate(results, 1):
+        print(f"{i}. {res}...")  # Print first 200 characters of each chunk

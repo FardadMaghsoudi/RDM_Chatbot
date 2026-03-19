@@ -1,0 +1,25 @@
+program: scripts/finetune_new.py  # Replace with the actual name of your script
+method: grid
+parameters:
+  model_name:
+    values:
+      - "mistralai/Ministral-3-3B-Instruct-2512-BF16"
+        #- "mistralai/Ministral-3-8B-Instruct-2512-BF16"
+        #- "Qwen/Qwen2.5-3B-Instruct"
+        #- "meta-llama/Llama-3.2-3B-Instruct"
+  learning_rate:
+    values: [1e-4]
+  lora_r:
+    values: [8, 16, 32]
+  epochs:
+    values: [5]
+  batch_size:
+    values: [1]
+  test_size:
+    values: [0.1, 0.2]
+
+command:
+  - ${env}
+  - python
+  - ${program}
+  - ${args}

@@ -1,0 +1,22 @@
+program: scripts/finetune_offloaded_version.py  # Replace with the actual name of your script
+method: grid
+parameters:
+  model_name:
+    values:
+      - "mistralai/Ministral-3-3B-Instruct-2512-BF16"
+      - "Qwen/Qwen2.5-3B-Instruct"
+      - "meta-llama/Llama-3.2-3B-Instruct"
+  learning_rate:
+    values: [1e-4]
+  lora_r:
+    values: [8, 16, 32]
+  epochs:
+    values: [10]
+  batch_size:
+    values: [1]
+
+command:
+  - ${env}
+  - python
+  - ${program}
+  - ${args}

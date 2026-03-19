@@ -5,21 +5,53 @@ from bs4 import BeautifulSoup
 import re
 import pickle
 
-def load_pdf_text(pdf_path):
+def load_pdf_text(pdf_path, header_margin=60, footer_margin=50):
+    """
+    Loads text from a PDF while cropping out headers and footers.
+    
+    Args:
+        pdf_path (str): Path to the PDF file.
+        header_margin (int): Height of the top area to ignore (default 60).
+        footer_margin (int): Height of the bottom area to ignore (default 50).
+        
+    Returns:
+        str: Cleaned text content.
+    """
     text = ""
     with open(pdf_path, "rb") as f:
         reader = PyPDF2.PdfReader(f)
+        
         for page in reader.pages:
+            # Get original page dimensions
+            # Note: PDF coordinates typically start from bottom-left (0,0)
+            page_width = page.mediabox.width
+            page_height = page.mediabox.height
+            
+            # Apply Cropping to exclude Header and Footer
+            # Set the bottom boundary (exclude footer)
+            page.cropbox.lower_left = (0, footer_margin)
+            
+            # Set the top boundary (exclude header)
+            # We subtract the header_margin from the total height
+            page.cropbox.upper_right = (page_width, page_height - header_margin)
+            
+            # Extract text only from the cropped "body" region
             text += page.extract_text() + "\n"
+            
     return text
 
 def load_all_pdfs(folder_path):
-    all_text = ""
+    all_text = []
     for root, dirs, files in os.walk(folder_path):
+        print(f"Number of files in folder: {len(files)}")
         for filename in files:
             if filename.endswith(".pdf"):
                 full_path = os.path.join(root, filename)
-                all_text += load_pdf_text(full_path) + "\n"
+                raw_text = load_pdf_text(full_path)
+                if raw_text:
+                    print(f"Found text in {filename}")
+                    all_text.append(raw_text)
+
     return all_text
 
 # TODO: add support for other file types
@@ -65,7 +97,8 @@ def download_pdfs_from_webpage(url, download_folder="../policies/tudelft_policie
             if pdf_a:
                 pdf_href = pdf_a["href"]
                 if not pdf_href.startswith("http") and not pdf_href.startswith("https"):
-                    pdf_href = requests.compat.urljoin(zenodo_url, pdf_href)
+                    print(f"Found relative PDF link on Zenodo page: {pdf_href}")
+                    pdf_href = requests.compat.urljoin("https://zenodo.org", pdf_href)
                 filename = os.path.join(download_folder, os.path.basename(pdf_href.split("?")[0]))
                 if not os.path.exists(filename):
                     print(f"Downloading Zenodo PDF: {pdf_href}")
@@ -79,22 +112,22 @@ def download_pdfs_from_webpage(url, download_folder="../policies/tudelft_policie
             print(f"Failed to process Zenodo page {zenodo_url}: {e}")
     return download_folder 
 
-def save_or_load_pdf_text(pdf_text_path, pdf_folder):
-    if os.path.exists(pdf_text_path):
-        with open(pdf_text_path, "rb") as f:
-            return pickle.load(f)
-    else:
-        pdf_text = load_all_pdfs(pdf_folder)
-        with open(pdf_text_path, "wb") as f:
-            pickle.dump(pdf_text, f)
-        return pdf_text
-
-def save_or_load_pdf_chunks(pdf_chunks_path, pdf_text, split_text_func):
+def save_or_load_pdf_chunks(pdf_chunks_path, pdf_folder, split_text_func):
     if os.path.exists(pdf_chunks_path):
         with open(pdf_chunks_path, "rb") as f:
             return pickle.load(f)
     else:
-        pdf_chunks = split_text_func(pdf_text)
+        pdf_docs = load_all_pdfs(pdf_folder)
+        all_chunks = []
+
+        for doc_text in pdf_docs:
+            if doc_text: # Ensure text is not empty
+                # split_text_func expects a string and returns a list of chunks
+                doc_chunks = split_text_func(doc_text)
+
+                # 3. Add these chunks to our master list (flattening the list)
+                all_chunks.extend(doc_chunks)
+
         with open(pdf_chunks_path, "wb") as f:
-            pickle.dump(pdf_chunks, f)
-        return pdf_chunks 
+            pickle.dump(all_chunks, f)
+        return all_chunks 
