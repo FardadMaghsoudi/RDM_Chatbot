@@ -10,6 +10,10 @@ def scrape_webpage_old(url):
     text = soup.get_text()
     return clean_text(text)
 
+def get_url_list(allowed_urls: dict) -> list:
+    """Extract just the URLs from the ALLOWED_URLS dictionary, returning a plain list."""
+    return list(allowed_urls.values())
+
 def save_or_load_web_chunks(web_chunks_path, web_urls, split_text_func, web_crawling_func=crawl_website):
     if os.path.exists(web_chunks_path):
         with open(web_chunks_path, "rb") as f:
@@ -18,9 +22,11 @@ def save_or_load_web_chunks(web_chunks_path, web_urls, split_text_func, web_craw
     unique_pages = {}
 
     print(f"Starting discovery from {len(web_urls)} entry points...")
+    
+    web_urls_list = get_url_list(web_urls)
 
     # 1. Crawl and Collect (Single Pass)
-    for start_url in web_urls:
+    for start_url in web_urls_list:
         # web_crawling_func (crawl_website) returns a list of tuples: [(url, clean_text), ...]
         # It has already filtered out pages that don't have the "On this page" section.
         crawled_data = web_crawling_func(start_url)
