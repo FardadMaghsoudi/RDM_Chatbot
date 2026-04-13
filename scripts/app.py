@@ -221,4 +221,4 @@ with gr.Blocks(title="Dizzi", theme=gr.themes.Soft()) as demo:
     )
 
 if __name__ == "__main__":
-    demo.launch()
+    demo.launch(share=True)

@@ -1,4 +1,4 @@
-program: scripts/finetune_new.py  # Replace with the actual name of your script
+program: scripts/finetune_new.py
 method: grid
 parameters:
   model_name:
@@ -10,13 +10,13 @@ parameters:
   learning_rate:
     values: [1e-4]
   lora_r:
-    values: [8, 16, 32]
+    values: [16]
   epochs:
     values: [5]
   batch_size:
     values: [1]
   test_size:
-    values: [0.1, 0.2]
+    values: [0.1]
 
 command:
   - ${env}
