@@ -1,4 +1,6 @@
 policies/
+docs/
+__pycache__/
 .env
 scripts/__pycache__/
 .DS_Store

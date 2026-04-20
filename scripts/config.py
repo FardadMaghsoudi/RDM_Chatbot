@@ -58,6 +58,14 @@ WEB_URLS = {
     # library
     "TU Delft Library": "https://www.tudelft.nl/library",
     "About TU Delft": "https://www.tudelft.nl/en/about-tu-delft"
+
+    # HREC
+    "Research Design 1: Minimising risk": "https://www.tudelft.nl/over-tu-delft/strategie/integriteitsbeleid/human-research-ethics/research-design-1-minimising-risk",
+    "Research Design 2: Risk-planning Session": "https://www.tudelft.nl/over-tu-delft/strategie/integriteitsbeleid/human-research-ethics/research-design-2-risk-planning-session",
+    "Research Design 3: Communicating and managing risk": "https://www.tudelft.nl/over-tu-delft/strategie/integriteitsbeleid/human-research-ethics/research-design-3-communicating-and-managing-risk",
+    "HREC Approval 1: Application": "https://www.tudelft.nl/over-tu-delft/strategie/integriteitsbeleid/human-research-ethics/hrec-approval-1-application",
+    "HREC Approval 2: Student and course-related research": "https://www.tudelft.nl/over-tu-delft/strategie/integriteitsbeleid/human-research-ethics/hrec-approval-2-student-and-course-related-research",
+    "Tools and links for HREC": "https://www.tudelft.nl/over-tu-delft/strategie/integriteitsbeleid/human-research-ethics/tools-and-links",
 }
 
 HF_TOKEN = os.environ.get("HF_TOKEN")
