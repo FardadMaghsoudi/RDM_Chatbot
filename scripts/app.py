@@ -69,7 +69,7 @@ HELP_TEXT = """\
 - `/echo` – echo back text
 """
 
-def generate_response(message: str):
+def generate_response(message: str, history: List[gr.ChatMessage]):
     user_text = message.strip()
 
     # Commands
@@ -88,7 +88,7 @@ def generate_response(message: str):
 
     # Real Generation
     try:
-        answer = generate_answer(user_text, vector_store, mistral_model)
+        answer = generate_answer(user_text, vector_store, mistral_model, history=history)
         #answer = f"Simulated answer to: {user_text}" # Placeholder
         return answer
     except Exception as e:
@@ -111,9 +111,16 @@ def chat_generation_loop(message: str, history: List[gr.ChatMessage]):
 
     result_queue = queue.Queue()
     
+    safe_history = []
+    for msg in history:
+        if hasattr(msg, "role"):
+            safe_history.append({"role": msg.role, "content": msg.content})
+        else:
+            safe_history.append({"role": msg.get("role", ""), "content": msg.get("content", "")})
+
     # Run heavy generation in thread
     gen_thread = threading.Thread(
-        target=lambda: result_queue.put(generate_response(message))
+        target=lambda: result_queue.put(generate_response(message, list(safe_history)))
     )
     gen_thread.start()
 
@@ -138,7 +145,7 @@ def chat_generation_loop(message: str, history: List[gr.ChatMessage]):
     total_time = time.time() - start_time
     
     final_content = f"{raw_response}\n\n_Generated in {total_time:.2f}s_"
-    history.append(gr.ChatMessage(role="assistant", content=final_content))
+    history.append(gr.ChatMessage(role="assistant", content=raw_response))
     yield history
 
 def check_status_and_update_ui():

@@ -124,22 +124,31 @@ def validate_output(response: str) -> Tuple[bool, str]:
     # Response is safe
     return True, response
 
-def build_prompt(query, context, url_ref=""):
+def build_prompt(query, context, url_ref="", history=""):
     system = SYSTEM_PROMPT.format(url_ref=url_ref)
-    return f"<s>[INST] {system}\n\nContext:\n{context}\n\nQuestion:\n{query} [/INST] "
+    return f"<s>[INST] {system}\n\nContext:\n{context}\n\nConversation history:\n{history}\n\nCurrent question:\n{query} [/INST] "
 
-def generate_answer(query, vector_store, model_and_tokenizer):
+def generate_answer(query, vector_store, model_and_tokenizer, history=None):
     is_safe, safe_response = validate_input(query)
     if not is_safe:
         print(f"[SECURITY] Suspicious request detected: {query[:100]}...")
         return safe_response
 
     model, tokenizer = model_and_tokenizer
+
+    formatted_history = ""
+    if history:
+        # We take the last few exchanges to avoid hitting context limits
+        for msg in history[-10:]:
+            role = "User" if msg["role"] == "user" else "Assistant"
+            content = msg["content"]
+            formatted_history += f"{role}: {content}\n"
+
     docs = vector_store.similarity_search(query, k=5)
     chunks = [d if isinstance(d, str) else d.page_content for d in docs]
     context = "\n---\n".join(chunks)
 
-    final_prompt = build_prompt(query, context, URL_REF)
+    final_prompt = build_prompt(query, context, URL_REF, formatted_history)
     inputs = tokenizer(final_prompt, return_tensors="pt").to(model.device)
     
     with torch.inference_mode():
