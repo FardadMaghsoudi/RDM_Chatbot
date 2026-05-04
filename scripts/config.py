@@ -57,7 +57,7 @@ WEB_URLS = {
     
     # library
     "TU Delft Library": "https://www.tudelft.nl/library",
-    "About TU Delft": "https://www.tudelft.nl/en/about-tu-delft"
+    "About TU Delft": "https://www.tudelft.nl/en/about-tu-delft",
 
     # HREC
     "Research Design 1: Minimising risk": "https://www.tudelft.nl/over-tu-delft/strategie/integriteitsbeleid/human-research-ethics/research-design-1-minimising-risk",
@@ -68,8 +68,15 @@ WEB_URLS = {
     "Tools and links for HREC": "https://www.tudelft.nl/over-tu-delft/strategie/integriteitsbeleid/human-research-ethics/tools-and-links",
 }
 
+JUPYTER_BOOK_URLS = {
+    "TeachBooks Files and Folders": "https://teachbooks.io/files-and-folders/EN/intro.html",
+    "MSc Planning for Personal Data": "https://tu-delft-library.github.io/MSc-Planning-for-Personal-Data/main/intro.html",
+    "BSc Research Ethics for Personal Data": "https://tu-delft-library.github.io/BSc_Research_Ethics_for_Personal_Data/main/intro.html",
+}
+
 HF_TOKEN = os.environ.get("HF_TOKEN")
 PDF_FOLDER = "policies"
+PRDW_PATH = "docs/PRDW.pdf"
 
 # Intermediate data file names
 ## In case Line 42 doesn't work, use the following two lines instead:

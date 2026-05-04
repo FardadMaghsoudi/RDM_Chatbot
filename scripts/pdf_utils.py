@@ -21,28 +21,16 @@ def load_pdf_text(pdf_path, header_margin=60, footer_margin=50):
     Returns:
         str: Cleaned text content.
     """
-    text = ""
-    with open(pdf_path, "rb") as f:
-        reader = PyPDF2.PdfReader(f)
-        
-        for page in reader.pages:
-            # Get original page dimensions
-            # Note: PDF coordinates typically start from bottom-left (0,0)
-            page_width = page.mediabox.width
-            page_height = page.mediabox.height
-            
-            # Apply Cropping to exclude Header and Footer
-            # Set the bottom boundary (exclude footer)
-            page.cropbox.lower_left = (0, footer_margin)
-            
-            # Set the top boundary (exclude header)
-            # We subtract the header_margin from the total height
-            page.cropbox.upper_right = (page_width, page_height - header_margin)
-            
-            # Extract text only from the cropped "body" region
-            text += page.extract_text() + "\n"
-            
-    return text
+    text_parts = []
+    with pdfplumber.open(pdf_path) as pdf:
+        for page in pdf.pages:
+            # pdfplumber crop bbox: (x0, top, x1, bottom) from top-left origin
+            cropped = page.crop((0, header_margin, page.width, page.height - footer_margin))
+            page_text = cropped.extract_text()
+            if page_text:
+                text_parts.append(page_text)
+    return "\n".join(text_parts)
+
 
 def load_prdw_pdf_text(pdf_path):
     """
@@ -94,7 +82,7 @@ def load_prdw_pdf_text(pdf_path):
     # Join pages with a clear separator
     return "\n\n--- PAGE BREAK ---\n\n".join(page_texts)
 
-def load_all_pdfs(folder_path):
+def load_all_pdfs(folder_path, prdw_path):
     all_text = []
     for root, dirs, files in os.walk(folder_path):
         print(f"Number of files in folder: {len(files)}")
@@ -106,7 +94,7 @@ def load_all_pdfs(folder_path):
                     print(f"Found text in {filename}")
                     all_text.append(raw_text)
 
-    prdw_text = load_prdw_pdf_text("../docs/PRDW.pdf")
+    prdw_text = load_prdw_pdf_text(prdw_path)
     all_text.append(prdw_text)
 
     return all_text
@@ -192,12 +180,12 @@ def download_pdfs_from_webpage(url, download_folder="../policies/tudelft_policie
             print(f"Failed to process Zenodo page {zenodo_url}: {e}")
     return download_folder 
 
-def save_or_load_pdf_chunks(pdf_chunks_path, pdf_folder, split_text_func):
+def save_or_load_pdf_chunks(pdf_chunks_path, pdf_folder, split_text_func, prdw_path):
     if os.path.exists(pdf_chunks_path):
         with open(pdf_chunks_path, "rb") as f:
             return pickle.load(f)
     else:
-        pdf_docs = load_all_pdfs(pdf_folder)
+        pdf_docs = load_all_pdfs(pdf_folder, prdw_path)
         all_chunks = []
 
         for doc_text in pdf_docs:

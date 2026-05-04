@@ -147,9 +147,9 @@ def generate_answer(query, vector_store, model_and_tokenizer):
             **inputs,
             max_new_tokens=2048,
             do_sample=True,
-            temperature=0.9,
+            temperature=0.8,
             top_p=0.9,
-            repetition_penalty=1.1,
+            repetition_penalty=1.0,
             pad_token_id=tokenizer.eos_token_id,
             eos_token_id=tokenizer.eos_token_id,
             use_cache=True

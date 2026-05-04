@@ -1,6 +1,6 @@
 import requests
 from bs4 import BeautifulSoup
-from web_crawling import crawl_website, scrape_webpage
+from web_crawling import crawl_website, scrape_webpage, crawl_jupyter_book
 import pickle
 import os
 
@@ -14,7 +14,7 @@ def get_url_list(allowed_urls: dict) -> list:
     """Extract just the URLs from the ALLOWED_URLS dictionary, returning a plain list."""
     return list(allowed_urls.values())
 
-def save_or_load_web_chunks(web_chunks_path, web_urls, split_text_func, web_crawling_func=crawl_website):
+def save_or_load_web_chunks(web_chunks_path, web_urls, split_text_func, web_crawling_func=crawl_website, jupyter_book_urls=None):
     if os.path.exists(web_chunks_path):
         with open(web_chunks_path, "rb") as f:
             return pickle.load(f)
@@ -25,15 +25,26 @@ def save_or_load_web_chunks(web_chunks_path, web_urls, split_text_func, web_craw
     
     web_urls_list = get_url_list(web_urls)
 
+    shared_visited = set()
+
     # 1. Crawl and Collect (Single Pass)
     for start_url in web_urls_list:
         # web_crawling_func (crawl_website) returns a list of tuples: [(url, clean_text), ...]
         # It has already filtered out pages that don't have the "On this page" section.
-        crawled_data = web_crawling_func(start_url)
+        crawled_data = web_crawling_func(start_url, visited=shared_visited)
 
         for url, text in crawled_data:
             if url not in unique_pages:
                 unique_pages[url] = text
+
+    if jupyter_book_urls:
+        jb_urls = get_url_list(jupyter_book_urls)
+        print(f"Starting Jupyter Book crawl from {len(jb_urls)} entry points...")
+        for start_url in jb_urls:
+            crawled_data = crawl_jupyter_book(start_url)
+            for url, text in crawled_data:
+                if url not in unique_pages:
+                    unique_pages[url] = text
 
     print(f"Total unique valid pages collecting for processing: {len(unique_pages)}")
 
