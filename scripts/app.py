@@ -119,8 +119,7 @@ def generate_response(message: str) -> str | None:
 
     # Real Generation
     try:
-        answer = generate_answer(user_text, vector_store, mistral_model)
-        #answer = f"Simulated answer to: {user_text}" # Placeholder
+        answer = generate_answer(user_text, vector_store, mistral_model)    #answer = f"Simulated answer to: {user_text}" # Placeholder
         return answer
     except Exception as e:
         return f"Error: {type(e).__name__}: {e}"
@@ -191,8 +190,7 @@ def check_status_and_update_ui():
     return current_status, input_update
 
 def reset_chat():
-    """Returns the chat history reset to just the welcome message."""
-    return [gr.ChatMessage(role="assistant", content=WELCOME_MESSAGE)]
+    return [gr.ChatMessage(role="assistant", content=WELCOME_MESSAGE)]          #Returns the chat history reset to just the welcome message.
 
 # ---------------------------------------------------------------------------
 # Gradio UI layout
@@ -203,7 +201,7 @@ with gr.Blocks(title="Dizzi", theme=gr.themes.Soft()) as demo:
 
     # Clean UI: Just the chat and a status indicator
     with gr.Row():
-        # Interactive=False means user can't type in it, it's just for display
+        # Interactive=False means user can't type in it, it's just for display      
         status_display = gr.Textbox(label="System Status", interactive=False)
 
     chatbot = gr.Chatbot(
@@ -229,7 +227,7 @@ with gr.Blocks(title="Dizzi", theme=gr.themes.Soft()) as demo:
 #  # Event wiring
 # -----------------------------------------------------------------------
 
-    # 1. Chat Submission (lock → generate → unlock )
+# 1. Chat Submission (lock → generate → unlock )
     msg_event = chat_input.submit(
         fn=clear_and_lock_input,
         inputs=[chat_input],
@@ -245,17 +243,16 @@ with gr.Blocks(title="Dizzi", theme=gr.themes.Soft()) as demo:
         outputs=chat_input
     )
 
-    # 2. Clear History
-    clear_btn.click(fn=reset_chat, inputs=None, outputs=chatbot, queue=False)
+# 2. Clear History
+    clear_btn.click(fn=reset_chat, inputs=None, outputs=chatbot, queue=False)  #clear_btn.click  →  reset_chat()  →  chatbot (resets to welcome message)
 
-    # 3. Timer: Updates Status text AND enables Chat Input when ready
-    # This replaces the need for a manual "Refresh" button
-    timer = gr.Timer(1.0)
+# 3. Timer: Updates Status text AND enables Chat Input when ready
+    timer = gr.Timer(1.0)      #gr.Timer (1s)  →  check_status_and_update_ui()  →  status_display + chat_input          
     timer.tick(
         fn=check_status_and_update_ui, 
         inputs=[], 
         outputs=[status_display, chat_input]
-    )
+    ) #This replaces the need for a manual "Refresh" button
 
 # ---------------------------------------------------------------------------
 # Entry point
