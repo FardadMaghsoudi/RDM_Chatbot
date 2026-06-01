@@ -11,13 +11,9 @@ from cleantext import clean
 def clean_text(text):
     cleaned_text = clean(
             text,
-            fix_unicode=True,
-            lower=True,
-            no_urls=False,  # Keep URLs for reference
-            no_emails=False,  # Keep emails for contact info
-            #no_punct=True,  # Remove for better search matching
-            normalize_whitespace=True,
-            no_line_breaks=True
+            extra_spaces=True,
+            stopwords=True,
+            punct=True,
         )
     return cleaned_text
 

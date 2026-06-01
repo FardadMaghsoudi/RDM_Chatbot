@@ -75,9 +75,9 @@ JUPYTER_BOOK_URLS = {
 }
 
 HF_TOKEN = os.environ.get("HF_TOKEN")
-PDF_FOLDER = "policies"
+PDF_FOLDER = "docs/policies"
 PRDW_PATH = "docs/PRDW.pdf"
-
+QNA_PATH = "docs/train_qnas"
 # Intermediate data file names
 ## In case Line 42 doesn't work, use the following two lines instead:
 PREPROCESSED_DATA_DIR = os.path.join(os.getcwd(), "preprocessed-data")

@@ -20,6 +20,8 @@ import wandb
 import evaluate
 from torch.utils.data import DataLoader
 from mistral_model import build_prompt
+from config import QNA_PATH
+from pathlib import Path
 
 # --- 1. Setup ---
 def parse_args():
@@ -140,9 +142,14 @@ def tokenize_and_mask(batch):
     return model_inputs
 
 print("Processing dataset with manual masking...")
-data_path_dmp = "dmp_questions.jsonl"
-data_path_policies = "policies_questions.jsonl"
-dataset = load_dataset("json", data_files={"train": [data_path_dmp, data_path_policies]}, split="train")
+jsonl_files = sorted(str(path) for path in Path(QNA_PATH).glob("*.jsonl"))
+
+dataset = load_dataset(
+    "json",
+    data_files={"train": jsonl_files},
+    split="train",
+)
+
 split_dataset = dataset.train_test_split(test_size=args.test_size, seed=42)
 
 # Run the masking function
