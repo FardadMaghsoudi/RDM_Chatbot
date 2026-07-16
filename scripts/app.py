@@ -175,9 +175,10 @@ with gr.Blocks(title="Dizzi", theme=gr.themes.Soft()) as demo:
     gr.Markdown("# 🤖 Dizzy")
 
     # Clean UI: Just the chat and a status indicator
-    with gr.Row():
-        # Interactive=False means user can't type in it, it's just for display
-        status_display = gr.Textbox(label="System Status", interactive=False)
+#    with gr.Row():
+#        # Interactive=False means user can't type in it, it's just for display
+#        status_display = gr.Textbox(label="System Status", interactive=False)
+    status_display = gr.State() # remove this and uncomment lines above to see backend status on main page 
 
     chatbot = gr.Chatbot(
         value=reset_chat(),

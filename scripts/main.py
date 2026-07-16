@@ -9,12 +9,13 @@ import queue
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from pydantic import BaseModel
 import gradio as gr
 
+import admin
 import config
-from mistral_model import get_mistral_model, generate_answer
+from mistral_model import get_mistral_model, generate_answer, validate_input, SAFE_RESPONSE
 from data_preprocessing import preprocess_data
 
 # ──────────────────────────────────────────────
@@ -39,6 +40,14 @@ def get_backend_status_str() -> str:
         return f"{backend_status['state']} – {backend_status.get('message', '')}"
 
 
+def get_backend_status_dict() -> dict:
+    with status_lock:
+        return dict(backend_status)
+
+
+admin.register_status_provider(get_backend_status_dict)
+
+
 # ──────────────────────────────────────────────
 #  Background loader (shared by API + Gradio)
 # ──────────────────────────────────────────────
@@ -54,6 +63,7 @@ def load_backend():
         _set_status("ready", "Backend ready")
     except Exception as e:
         _set_status("error", f"{type(e).__name__}: {e}")
+        admin.log_error("backend_loader", f"{type(e).__name__}: {e}")
 
 
 loader_thread = threading.Thread(target=load_backend, daemon=True)
@@ -64,6 +74,7 @@ loader_thread.start()
 #  FastAPI  –  REST endpoint
 # ──────────────────────────────────────────────
 app = FastAPI(title="Dizzy")
+app.include_router(admin.router)
 
 
 class Query(BaseModel):
@@ -71,11 +82,30 @@ class Query(BaseModel):
 
 
 @app.post("/chat")
-def chat(query: Query):
+def chat(query: Query, request: Request):
+    ip = request.client.host if request.client else None
+    user_id = ip or "unknown"
+
     with status_lock:
         if backend_status["state"] != "ready":
             return {"error": f"Backend not ready: {get_backend_status_str()}"}
-    answer = generate_answer(query.question, vector_store, mistral_model)
+
+    matched = admin.detect_malicious(query.question)
+    input_is_safe, _ = validate_input(query.question)
+    if not input_is_safe:
+        matched.append("model-filter:input")
+    user_chat_id = admin.log_chat(user_id=user_id, role="user", content=query.question, ip=ip, matched_keywords=matched)
+
+    try:
+        answer = generate_answer(query.question, vector_store, mistral_model)
+    except Exception as e:
+        admin.log_error("api_chat", f"{type(e).__name__}: {e}")
+        return {"error": f"{type(e).__name__}: {e}"}
+
+    if input_is_safe and answer == SAFE_RESPONSE:
+        admin.append_flag(user_chat_id, ["model-filter:output"])
+
+    admin.log_chat(user_id=user_id, role="assistant", content=answer, ip=ip)
     return {"response": answer}
 
 
@@ -101,24 +131,38 @@ HELP_TEXT = """\
 """
 
 
-def generate_response(message: str):
+def generate_response(message: str, user_id: str = "anonymous", ip: str | None = None):
     user_text = message.strip()
 
+    matched = admin.detect_malicious(user_text)
+    input_is_safe, _ = validate_input(user_text)
+    if not input_is_safe:
+        matched.append("model-filter:input")
+    user_chat_id = admin.log_chat(user_id=user_id, role="user", content=user_text, ip=ip, matched_keywords=matched)
+
     if user_text.startswith("/help"):
-        return HELP_TEXT
-    if user_text.startswith("/time"):
-        return f"Server time: **{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}**"
-    if user_text.startswith("/echo"):
-        return user_text[len("/echo"):].strip() or "…(nothing to echo)"
+        answer = HELP_TEXT
+    elif user_text.startswith("/time"):
+        answer = f"Server time: **{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}**"
+    elif user_text.startswith("/echo"):
+        answer = user_text[len("/echo"):].strip() or "…(nothing to echo)"
+    else:
+        with status_lock:
+            ready = backend_status["state"] == "ready"
+        if not ready:
+            answer = f"Backend not ready: {get_backend_status_str()}"
+        else:
+            try:
+                answer = generate_answer(user_text, vector_store, mistral_model)
+            except Exception as e:
+                admin.log_error("gradio_chat", f"{type(e).__name__}: {e}")
+                answer = f"Error: {type(e).__name__}: {e}"
 
-    with status_lock:
-        if backend_status["state"] != "ready":
-            return f"Backend not ready: {get_backend_status_str()}"
+    if input_is_safe and answer == SAFE_RESPONSE:
+        admin.append_flag(user_chat_id, ["model-filter:output"])
 
-    try:
-        return generate_answer(user_text, vector_store, mistral_model)
-    except Exception as e:
-        return f"Error: {type(e).__name__}: {e}"
+    admin.log_chat(user_id=user_id, role="assistant", content=answer, ip=ip)
+    return answer
 
 
 def clear_and_lock_input(message):
@@ -129,13 +173,16 @@ def unlock_input():
     return gr.update(interactive=True, placeholder="Type a message…")
 
 
-def chat_generation_loop(message: str, history: List[gr.ChatMessage]):
+def chat_generation_loop(message: str, history: List[gr.ChatMessage], request: gr.Request):
     history.append(gr.ChatMessage(role="user", content=message))
     yield history
 
+    user_id = request.session_hash if request else "anonymous"
+    ip = request.client.host if request and request.client else None
+
     result_queue: queue.Queue = queue.Queue()
     gen_thread = threading.Thread(
-        target=lambda: result_queue.put(generate_response(message))
+        target=lambda: result_queue.put(generate_response(message, user_id, ip))
     )
     gen_thread.start()
 
@@ -226,20 +273,45 @@ with gr.Blocks(title="Dizzy", theme=gr.themes.Soft()) as demo:
 
 
 # ──────────────────────────────────────────────
-#  Mount Gradio onto FastAPI
-# ──────────────────────────────────────────────
-app = gr.mount_gradio_app(app, demo, path="/ui")
-
-
-# ──────────────────────────────────────────────
 #  Run
 # ──────────────────────────────────────────────
+# SHARE=true swaps who owns the server: instead of mounting Gradio onto our
+# FastAPI app and serving it with uvicorn, we let Gradio own the server via
+# demo.launch(share=True) and mount our routes (admin panel, /chat) onto
+# Gradio's app instead. That's required for Gradio's public tunnel to expose
+# /admin and /chat alongside the chat UI on the same shared link. Leave
+# SHARE unset for normal deployments.
+SHARE = os.getenv("SHARE", "false").strip().lower() in ("1", "true", "yes")
+
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        app, 
-        host=os.getenv("HOST","0.0.0.0"), 
-        port=int(os.getenv("PORT", 8000)), 
-        proxy_headers=True, 
-        forwarded_allow_ips=os.getenv("FORWARDED_ALLOW_IPS", "127.0.0.1"),
-    )
+    if SHARE:
+        gradio_app, local_url, share_url = demo.launch(
+            server_name=os.getenv("HOST", "0.0.0.0"),
+            server_port=int(os.getenv("PORT", 8000)),
+            share=True,
+            prevent_thread_lock=True,
+        )
+        gradio_app.include_router(admin.router)
+        gradio_app.post("/chat")(chat)
+
+        print(f"Admin panel (local):  {local_url}admin")
+        if share_url:
+            print(f"Admin panel (shared): {share_url}/admin")
+
+        try:
+            while True:
+                time.sleep(3600)
+        except KeyboardInterrupt:
+            demo.close()
+    else:
+        app = gr.mount_gradio_app(app, demo, path="/ui")
+
+        import uvicorn
+        uvicorn.run(
+            app,
+            host=os.getenv("HOST", "0.0.0.0"),
+            port=int(os.getenv("PORT", 8000)),
+            proxy_headers=True,
+            forwarded_allow_ips=os.getenv("FORWARDED_ALLOW_IPS", "127.0.0.1"),
+        )
+

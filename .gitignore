@@ -11,4 +11,4 @@ mistral-qlora-dmp/
 *.log
 wandb/
 results/
-
+data/
