@@ -14,11 +14,11 @@ def preprocess_data():
 
     # Load PDFs and split text (with intermediate saving/loading)
     print("Loading PDFs...")
-    pdf_chunks = save_or_load_pdf_chunks(config.PDF_CHUNKS_PATH, config.PDF_FOLDER, split_text_by_sentences)
+    pdf_chunks = save_or_load_pdf_chunks(config.PDF_CHUNKS_PATH, config.PDF_FOLDER, split_text_by_sentences, config.PRDW_PATH)
 
     # Scrape web pages and split text (with intermediate saving/loading)
     print("Scraping web pages...")
-    web_chunks = save_or_load_web_chunks(config.WEB_CHUNKS_PATH, config.WEB_URLS, split_text_by_sentences)
+    web_chunks = save_or_load_web_chunks(config.WEB_CHUNKS_PATH, config.WEB_URLS, split_text_by_sentences, jupyter_book_urls=config.JUPYTER_BOOK_URLS)
     
     print("Creating vector store...")
     combined_chunks = web_chunks + pdf_chunks

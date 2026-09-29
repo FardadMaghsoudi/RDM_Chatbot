@@ -1,5 +1,9 @@
 import os
 import PyPDF2
+from PyPDF2 import PdfReader, PdfWriter, Transformation
+from PyPDF2._page import PageObject
+import argparse
+import pdfplumber
 import requests
 from bs4 import BeautifulSoup
 import re
@@ -17,30 +21,68 @@ def load_pdf_text(pdf_path, header_margin=60, footer_margin=50):
     Returns:
         str: Cleaned text content.
     """
-    text = ""
-    with open(pdf_path, "rb") as f:
-        reader = PyPDF2.PdfReader(f)
-        
-        for page in reader.pages:
-            # Get original page dimensions
-            # Note: PDF coordinates typically start from bottom-left (0,0)
-            page_width = page.mediabox.width
-            page_height = page.mediabox.height
-            
-            # Apply Cropping to exclude Header and Footer
-            # Set the bottom boundary (exclude footer)
-            page.cropbox.lower_left = (0, footer_margin)
-            
-            # Set the top boundary (exclude header)
-            # We subtract the header_margin from the total height
-            page.cropbox.upper_right = (page_width, page_height - header_margin)
-            
-            # Extract text only from the cropped "body" region
-            text += page.extract_text() + "\n"
-            
-    return text
+    text_parts = []
+    with pdfplumber.open(pdf_path) as pdf:
+        for page in pdf.pages:
+            # pdfplumber crop bbox: (x0, top, x1, bottom) from top-left origin
+            cropped = page.crop((0, header_margin, page.width, page.height - footer_margin))
+            page_text = cropped.extract_text()
+            if page_text:
+                text_parts.append(page_text)
+    return "\n".join(text_parts)
 
-def load_all_pdfs(folder_path):
+
+def load_prdw_pdf_text(pdf_path):
+    """
+    Extracts text from the PRDW PDF while filtering out repeating headers,
+    footers, and navigation elements.
+    """
+    # Known repeating navigation/footer phrases specific to this document
+    NAV_PHRASES = [
+        "USING THIS GUIDE", "NAVIGATION", "THE PDRW+", "THE RISKS", "THE MITIGATIONS",
+        "INDEX", "Q & A", "Q&A", "TIMINGS",
+        "BACK", "NEXT", "BACK TO NAVIGATION",
+    ]
+
+    # Compile a regex pattern to detect navigation keywords
+    nav_pattern = re.compile(r"(" + "|".join([re.escape(p) for p in NAV_PHRASES]) + r")", re.IGNORECASE)
+
+    page_texts = []
+
+    with pdfplumber.open(pdf_path) as pdf:
+        for page_num, page in enumerate(pdf.pages, start=1):
+            raw_text = page.extract_text()
+            if not raw_text:
+                continue
+
+            lines = raw_text.splitlines()
+            cleaned_lines = []
+
+            for line in lines:
+                stripped = line.strip()
+
+                # Skip empty lines and pure page numbers
+                if not stripped or re.match(r"^\d+$", stripped):
+                    continue
+
+                # Normalize extra spaces (common in PDF text extraction)
+                normalized = re.sub(r"\s+", " ", stripped)
+
+                # Filter out lines that are dominated by navigation keywords
+                nav_matches = nav_pattern.findall(normalized)
+                # If a line contains 3 or more distinct navigation keywords, it's a UI element
+                if len(nav_matches) >= 3:
+                    continue
+
+                cleaned_lines.append(normalized)
+
+            if cleaned_lines:
+                page_texts.append("\n".join(cleaned_lines))
+
+    # Join pages with a clear separator
+    return "\n\n--- PAGE BREAK ---\n\n".join(page_texts)
+
+def load_all_pdfs(folder_path, prdw_path):
     all_text = []
     for root, dirs, files in os.walk(folder_path):
         print(f"Number of files in folder: {len(files)}")
@@ -52,7 +94,33 @@ def load_all_pdfs(folder_path):
                     print(f"Found text in {filename}")
                     all_text.append(raw_text)
 
+    prdw_text = load_prdw_pdf_text(prdw_path)
+    all_text.append(prdw_text)
+
     return all_text
+
+def remove_last_n_pages(src: str, dst: str, n: int = 1) -> None:
+    """
+    Write *dst* as a copy of *src* with the last *n* pages removed.
+    """
+    reader = PyPDF2.PdfReader(src)
+    total  = len(reader.pages)
+ 
+    if n >= total:
+        raise ValueError(
+            f"Cannot remove {n} page(s) from '{os.path.basename(src)}' "
+            f"which only has {total} page(s)."
+        )
+ 
+    writer = PyPDF2.PdfWriter()
+    for page in reader.pages[: total - n]:
+        writer.add_page(page)
+ 
+    _write(writer, dst)
+    print(f"  ✓  Removed last {n} page(s): {os.path.basename(src)}  "
+          f"({total} → {total - n} pages)")
+
+
 
 # TODO: add support for other file types
 def download_pdfs_from_webpage(url, download_folder="../policies/tudelft_policies"): 
@@ -112,12 +180,12 @@ def download_pdfs_from_webpage(url, download_folder="../policies/tudelft_policie
             print(f"Failed to process Zenodo page {zenodo_url}: {e}")
     return download_folder 
 
-def save_or_load_pdf_chunks(pdf_chunks_path, pdf_folder, split_text_func):
+def save_or_load_pdf_chunks(pdf_chunks_path, pdf_folder, split_text_func, prdw_path):
     if os.path.exists(pdf_chunks_path):
         with open(pdf_chunks_path, "rb") as f:
             return pickle.load(f)
     else:
-        pdf_docs = load_all_pdfs(pdf_folder)
+        pdf_docs = load_all_pdfs(pdf_folder, prdw_path)
         all_chunks = []
 
         for doc_text in pdf_docs:
@@ -131,3 +199,8 @@ def save_or_load_pdf_chunks(pdf_chunks_path, pdf_folder, split_text_func):
         with open(pdf_chunks_path, "wb") as f:
             pickle.dump(all_chunks, f)
         return all_chunks 
+
+def _write(writer: PyPDF2.PdfWriter, dst: str) -> None:
+    os.makedirs(os.path.dirname(os.path.abspath(dst)), exist_ok=True)
+    with open(dst, "wb") as fh:
+        writer.write(fh)

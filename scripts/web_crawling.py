@@ -73,9 +73,109 @@ def scrape_webpage(soup):
     
     return ""
 
-# Helper: Crawl one site
-def crawl_website(base_url, max_pages=20, delay=1.5):
+def scrape_jupyter_book_page(soup):
+    """Extract text from a Jupyter Book page (bd-content or article container)."""
+    warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
+    if isinstance(soup, str):
+        soup = BeautifulSoup(soup, "html.parser")
+
+    content_area = soup.find("div", class_="bd-content")
+    if not content_area:
+        content_area = soup.find("article")
+    if not content_area:
+        print("  -> Debug: No Jupyter Book content container found")
+        return ""
+    # Remove navigation, footer, and UI elements before extracting text
+    _UI_PHRASES = {"previous", "next", "suggest edit", "open issue", "repository",
+                   "contents", "suggest edit on this page"}
+    for tag in content_area.find_all(["footer", "nav"]):
+        tag.decompose()
+    for tag in content_area.find_all(
+        lambda t: t.get("class") and
+        any(x in " ".join(t["class"]) for x in ["prev-next", "footer", "edit-this-page",
+                                                  "sourcelink", "tocsection"])
+    ):
+        tag.decompose()
+
+    extracted = []
+    for el in content_area.find_all(["h1", "h2", "h3", "h4", "p", "li"]):
+        if el.name == "li" and el.find("p"):
+            continue
+        text = el.get_text(separator=" ", strip=True)
+        if len(text) > 5:
+            extracted.append(text)
+
+    return "\n\n".join(extracted) if extracted else ""
+
+
+def crawl_jupyter_book(start_url, delay=1.5):
+    """Crawl a Jupyter Book by following 'next' navigation links sequentially."""
     visited = set()
+    all_pages = []
+    session = create_session()
+    current_url = start_url.split('#')[0]
+
+    while current_url and current_url not in visited:
+        print(f"Fetching: {current_url}")
+        visited.add(current_url)
+
+        try:
+            response = session.get(current_url, timeout=10)
+            if response.status_code != 200:
+                print(f"  -> HTTP {response.status_code}, stopping.")
+                break
+
+            content_type = response.headers.get("Content-Type", "").lower()
+            if "text/html" not in content_type:
+                print(f"  -> Skipping: Content-Type is {content_type}")
+                break
+
+            soup = BeautifulSoup(response.content, "html.parser")
+
+            page_text = scrape_jupyter_book_page(soup)
+            if page_text:
+                all_pages.append((current_url, page_text))
+
+            # Strategy 1: <a rel="next">
+            next_tag = soup.find("a", rel="next")
+
+            # Strategy 2: common Jupyter Book CSS classes
+            if not next_tag:
+                for cls in ["next-page", "right-next"]:
+                    next_tag = soup.find("a", class_=cls)
+                    if next_tag:
+                        break
+
+            # Strategy 3: any <a> whose text contains "next" inside a prev-next area
+            if not next_tag:
+                nav = soup.find(lambda tag: tag.name == "div" and tag.get("class") and
+                                any("prev-next" in c for c in tag.get("class", [])))
+                if nav:
+                    for a in nav.find_all("a", href=True):
+                        if "next" in a.get_text(strip=True).lower():
+                            next_tag = a
+                            break
+
+            if next_tag and next_tag.get("href"):
+                next_url = urljoin(current_url, next_tag["href"]).split('#')[0]
+            else:
+                print("  -> No 'next' button found. Crawl complete.")
+                break
+
+            current_url = next_url
+            time.sleep(delay)
+
+        except Exception as e:
+            print(f"  Error fetching {current_url}: {e}")
+            break
+
+    return all_pages
+
+# Helper: Crawl one site
+def crawl_website(base_url, max_pages=20, delay=1.5, visited=None):
+    if visited is None:
+        visited = set()
+
     to_visit = [base_url]
     all_pages = []
 
