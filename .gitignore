@@ -12,3 +12,7 @@ mistral-qlora-dmp/
 wandb/
 results/
 data/
+
+# Local archive of untracked data (docs/ + .env, contains secrets)
+untracked_data.zip
+.pytest_cache/

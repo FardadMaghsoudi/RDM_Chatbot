@@ -1,12 +1,8 @@
 # Libraries 
-import os
-import pickle
-import config
 import time
 import warnings
-from vector_store import split_text, SimpleVectorStore
 import requests
-from bs4 import BeautifulSoup, NavigableString, Tag, MarkupResemblesLocatorWarning
+from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
 from urllib.parse import urljoin, urlparse
 
 HEADERS = {
@@ -173,21 +169,29 @@ def crawl_jupyter_book(start_url, delay=1.5):
 
 # Helper: Crawl one site
 def crawl_website(base_url, max_pages=20, delay=1.5, visited=None):
+    """
+    Breadth-first crawl starting at base_url, following links on the same domain.
+
+    max_pages limits the number of pages fetched by THIS call. `visited` can be shared between
+    calls so that pages already fetched from another start URL are not fetched again.
+    """
     if visited is None:
         visited = set()
 
     to_visit = [base_url]
     all_pages = []
+    pages_fetched = 0
 
     session = create_session()
 
-    while to_visit and len(visited) < max_pages:
+    while to_visit and pages_fetched < max_pages:
         url = to_visit.pop(0)
         if url in visited:
             continue
 
         print(f"Fetching: {url}")
         visited.add(url)
+        pages_fetched += 1
 
         try:
             response = session.get(url,timeout=10)
@@ -238,44 +242,3 @@ def crawl_website(base_url, max_pages=20, delay=1.5, visited=None):
             continue
 
     return all_pages
-
-# Preprocess Data
-def preprocess_data():
-    all_chunks = []
-    store = SimpleVectorStore()
-
-    # Step 1: Crawl all mother links from config
-    crawled_pages = []
-    for start_url in config.WEB_START_URLS:
-        print(f" Crawling from: {start_url}")
-        crawled_pages.extend(crawl_website(start_url, max_pages=20))
-
-    print(f" Crawled {len(crawled_pages)} pages in total")
-
-    # Step 2: Split text into chunks
-    for url, text in crawled_pages:
-        chunks = split_text(text)
-        all_chunks.extend(chunks)
-
-    # Step 3: Save chunks to intermediate file
-    os.makedirs(config.PREPROCESSED_DATA_DIR, exist_ok=True)
-    with open(config.WEB_CHUNKS_PATH, "wb") as f:
-        pickle.dump(all_chunks, f)
-
-    # Step 4: Add chunks to vector store
-    store.add(all_chunks)
-
-    print(f" Stored {len(all_chunks)} chunks in vector store")
-    print(f" Saved web chunks to {config.WEB_CHUNKS_PATH}")
-
-    return store, all_chunks, crawled_pages
-
-if __name__ == "__main__":
-    store, chunks, pages = preprocess_data()
-    global_store = store
-    global_chunks = chunks
-    global_pages = pages
-
-    print("Preview:")
-    print("First URL:", global_pages[0][0])
-    print("First 300 chars of text:", global_pages[0][1][:300])

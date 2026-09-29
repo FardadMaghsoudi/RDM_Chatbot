@@ -75,14 +75,17 @@ JUPYTER_BOOK_URLS = {
 }
 
 HF_TOKEN = os.environ.get("HF_TOKEN")
-PDF_FOLDER = "docs/policies"
-PRDW_PATH = "docs/PRDW.pdf"
-QNA_PATH = "docs/train_qnas"
+
+# All paths are resolved relative to the project root, so scripts can be run from any directory
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PDF_FOLDER = os.path.join(PROJECT_ROOT, "docs", "policies")
+PRDW_PATH = os.path.join(PROJECT_ROOT, "docs", "PRDW.pdf")
+QNA_PATH = os.path.join(PROJECT_ROOT, "docs", "train_qnas")
+RESULTS_DIR = os.path.join(PROJECT_ROOT, "results")
+# LoRA adapter used by the chatbot (folder with adapter_model.safetensors, etc.)
+ADAPTER_DIR = os.path.join(RESULTS_DIR, "Ministral-3-3B-Instruct-2512-BF16-full-r16-lr0.0001-ep5-bs1-test0.1")
 # Intermediate data file names
-## In case Line 42 doesn't work, use the following two lines instead:
-PREPROCESSED_DATA_DIR = os.path.join(os.getcwd(), "preprocessed-data")
+PREPROCESSED_DATA_DIR = os.path.join(PROJECT_ROOT, "preprocessed-data")
 os.makedirs(PREPROCESSED_DATA_DIR, exist_ok=True)
-#PREPROCESSED_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "preprocessed-data")
-PDF_TEXT_PATH = os.path.join(PREPROCESSED_DATA_DIR, f"intermediate_pdf_text.pkl")
-PDF_CHUNKS_PATH = os.path.join(PREPROCESSED_DATA_DIR, f"intermediate_pdf_chunks.pkl")
-WEB_CHUNKS_PATH = os.path.join(PREPROCESSED_DATA_DIR, f"intermediate_web_chunks.pkl")
+PDF_CHUNKS_PATH = os.path.join(PREPROCESSED_DATA_DIR, "intermediate_pdf_chunks.pkl")
+WEB_CHUNKS_PATH = os.path.join(PREPROCESSED_DATA_DIR, "intermediate_web_chunks.pkl")

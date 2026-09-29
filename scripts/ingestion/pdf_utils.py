@@ -1,13 +1,11 @@
 import os
 import PyPDF2
-from PyPDF2 import PdfReader, PdfWriter, Transformation
-from PyPDF2._page import PageObject
-import argparse
 import pdfplumber
 import requests
 from bs4 import BeautifulSoup
 import re
 import pickle
+import config
 
 def load_pdf_text(pdf_path, header_margin=60, footer_margin=50):
     """
@@ -83,11 +81,21 @@ def load_prdw_pdf_text(pdf_path):
     return "\n\n--- PAGE BREAK ---\n\n".join(page_texts)
 
 def load_all_pdfs(folder_path, prdw_path):
+    """
+    Load the text of every PDF in folder_path plus the PRDW guide.
+
+    Some PDFs have a manually cleaned version (e.g. with the first/last pages removed) saved as
+    "<name>_clean.pdf". If both exist, only the clean version is loaded, so the document is not
+    included twice (e.g. after re-downloading the originals).
+    """
     all_text = []
     for root, dirs, files in os.walk(folder_path):
         print(f"Number of files in folder: {len(files)}")
         for filename in files:
             if filename.endswith(".pdf"):
+                if filename[:-len(".pdf")] + "_clean.pdf" in files:
+                    print(f"Skipping {filename}: using its _clean version")
+                    continue
                 full_path = os.path.join(root, filename)
                 raw_text = load_pdf_text(full_path)
                 if raw_text:
@@ -123,7 +131,7 @@ def remove_last_n_pages(src: str, dst: str, n: int = 1) -> None:
 
 
 # TODO: add support for other file types
-def download_pdfs_from_webpage(url, download_folder="../policies/tudelft_policies"): 
+def download_pdfs_from_webpage(url, download_folder=config.PDF_FOLDER):
     os.makedirs(download_folder, exist_ok=True)
     response = requests.get(url)
     soup = BeautifulSoup(response.content, "html.parser")
@@ -195,6 +203,9 @@ def save_or_load_pdf_chunks(pdf_chunks_path, pdf_folder, split_text_func, prdw_p
 
                 # 3. Add these chunks to our master list (flattening the list)
                 all_chunks.extend(doc_chunks)
+
+        # Drop exact duplicate chunks, keeping the first occurrence
+        all_chunks = list(dict.fromkeys(all_chunks))
 
         with open(pdf_chunks_path, "wb") as f:
             pickle.dump(all_chunks, f)

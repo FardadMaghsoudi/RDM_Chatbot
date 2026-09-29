@@ -1,4 +1,10 @@
 import os
+import sys
+from pathlib import Path
+
+# Make the scripts/ folder importable when this file is run directly
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import torch
 import argparse
 import numpy as np
@@ -8,7 +14,7 @@ from transformers import (
     AutoTokenizer,
     TrainingArguments,
     Trainer,
-    DataCollatorForLanguageModeling, 
+    default_data_collator,
     Mistral3ForConditionalGeneration,
 )
 import warnings
@@ -19,9 +25,8 @@ from dotenv import load_dotenv
 import wandb
 import evaluate
 from torch.utils.data import DataLoader
-from mistral_model import build_prompt
-from config import QNA_PATH
-from pathlib import Path
+from rag.mistral_model import build_prompt
+from config import QNA_PATH, RESULTS_DIR
 
 # --- 1. Setup ---
 def parse_args():
@@ -32,7 +37,7 @@ def parse_args():
     parser.add_argument("--epochs", type=int, default=5, help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, default=1, help="Batch size per device")
     parser.add_argument("--test_size", type=float, default=0.1, help="Test set size")
-    parser.add_argument("--project_name", type=str, default="Dizzy", help="Wandb project name")
+    parser.add_argument("--project_name", type=str, default="RDM_Chatbot-scripts", help="Wandb project name")
     return parser.parse_args()
 
 args = parse_args()
@@ -42,10 +47,12 @@ gc.collect()
 torch.cuda.empty_cache()
 warnings.filterwarnings("ignore")
 
-run_name = f"{args.model_name.split('/')[-1]}-full-r{args.lora_r}-test{args.test_size}"
-output_dir_ft = f"./results/{run_name}"
-offload_folder = "offload_weights"
-os.makedirs(offload_folder, exist_ok=True)
+# Include every swept hyper-parameter, so sweep runs don't overwrite each other's adapter
+run_name = (
+    f"{args.model_name.split('/')[-1]}-full-r{args.lora_r}-lr{args.learning_rate:g}"
+    f"-ep{args.epochs}-bs{args.batch_size}-test{args.test_size}"
+)
+output_dir_ft = os.path.join(RESULTS_DIR, run_name)
 
 wandb.init(
     project=args.project_name,
@@ -155,7 +162,9 @@ split_dataset = dataset.train_test_split(test_size=args.test_size, seed=42)
 # Run the masking function
 tokenized_dataset = split_dataset.map(tokenize_and_mask, batched=True, remove_columns=dataset.column_names)
 
-collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+# tokenize_and_mask already pads every example and masks the prompt in the labels, so the collator must
+# only stack the tensors (DataCollatorForLanguageModeling would rebuild the labels and undo the masking)
+collator = default_data_collator
 
 # --- Metric Computation for Evaluation ---
 def preprocess_logits_for_metrics(logits, labels):
@@ -251,7 +260,8 @@ model.eval()
 def collate_fn_generate(batch):
     prompts = [build_prompt(item['query'], item['context']) for item in batch]
     references = [item['answer'] for item in batch]
-    inputs = tokenizer(prompts, return_tensors="pt", padding=True, truncation=True, max_length=1024)
+    # The prompt already starts with <s>, so don't let the tokenizer add a second BOS token
+    inputs = tokenizer(prompts, return_tensors="pt", padding=True, truncation=True, max_length=1024, add_special_tokens=False)
     return inputs, references
 
 # Use batch size of 1 to prevent Out Of Memory (OOM) errors during generation

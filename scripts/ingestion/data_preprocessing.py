@@ -1,13 +1,21 @@
+import sys
+from pathlib import Path
+
+# Make the scripts/ folder importable when this file is run directly
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+import argparse
 import os
 import time
-from vector_store import split_text, SimpleVectorStore, split_text_by_sentences
-from pdf_utils import save_or_load_pdf_chunks, download_pdfs_from_webpage
-from web_utils import save_or_load_web_chunks
+from rag.vector_store import SimpleVectorStore, split_text_by_sentences
+from ingestion.pdf_utils import save_or_load_pdf_chunks, download_pdfs_from_webpage
+from ingestion.web_utils import save_or_load_web_chunks
 import config
 
-def preprocess_data():
-    # NOTE: Uncomment the next line if you want to download PDFs again
-    # download_pdfs_from_webpage(config.POLICIES_URL, config.PDF_FOLDER)
+def preprocess_data(download_pdfs=False):
+    # Re-download the faculty policy PDFs (only needed when the policies page has changed)
+    if download_pdfs:
+        download_pdfs_from_webpage(config.POLICIES_URL, config.PDF_FOLDER)
 
     # Ensure preprocessed-data directory exists
     os.makedirs(config.PREPROCESSED_DATA_DIR, exist_ok=True)
@@ -26,7 +34,11 @@ def preprocess_data():
     return combined_chunks, vector_store 
 
 if __name__ == "__main__":
-    cc, vs = preprocess_data()
+    parser = argparse.ArgumentParser(description="Build the chunk files and vector store")
+    parser.add_argument("--download-pdfs", action="store_true", help="Re-download the policy PDFs into docs/policies first")
+    args = parser.parse_args()
+
+    cc, vs = preprocess_data(download_pdfs=args.download_pdfs)
     print(f"Total chunks processed: {len(cc)}")
     # Test similarity search
     query = "What are the data management policies at TU Delft?"

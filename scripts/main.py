@@ -1,10 +1,12 @@
 from __future__ import annotations
 import os
+import re
 import time
 import threading
 from datetime import datetime
-from typing import List
+from typing import List, Literal
 import queue
+from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -14,9 +16,8 @@ from pydantic import BaseModel
 import gradio as gr
 
 import admin
-import config
-from mistral_model import get_mistral_model, generate_answer, validate_input, SAFE_RESPONSE
-from data_preprocessing import preprocess_data
+from rag.mistral_model import get_mistral_model, generate_answer, validate_input, SAFE_RESPONSE
+from ingestion.data_preprocessing import preprocess_data
 
 # ──────────────────────────────────────────────
 #  Shared state
@@ -66,19 +67,41 @@ def load_backend():
         admin.log_error("backend_loader", f"{type(e).__name__}: {e}")
 
 
-loader_thread = threading.Thread(target=load_backend, daemon=True)
-loader_thread.start()
+_loader_thread: threading.Thread | None = None
+_loader_lock = threading.Lock()
+
+
+def start_backend_loader():
+    """Start loading the data and model in a background thread (only once), so the
+    server can already answer requests (with a "not ready" status) while it loads."""
+    global _loader_thread
+    with _loader_lock:
+        if _loader_thread is None:
+            _loader_thread = threading.Thread(target=load_backend, daemon=True)
+            _loader_thread.start()
 
 
 # ──────────────────────────────────────────────
 #  FastAPI  –  REST endpoint
 # ──────────────────────────────────────────────
-app = FastAPI(title="Dizzy")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    start_backend_loader()
+    yield
+
+
+app = FastAPI(title="Dizzy", lifespan=lifespan)
 app.include_router(admin.router)
+
+
+class HistoryMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
 
 
 class Query(BaseModel):
     question: str
+    history: List[HistoryMessage] = []
 
 
 @app.post("/chat")
@@ -86,9 +109,8 @@ def chat(query: Query, request: Request):
     ip = request.client.host if request.client else None
     user_id = ip or "unknown"
 
-    with status_lock:
-        if backend_status["state"] != "ready":
-            return {"error": f"Backend not ready: {get_backend_status_str()}"}
+    if get_backend_status_dict()["state"] != "ready":
+        return {"error": f"Backend not ready: {get_backend_status_str()}"}
 
     matched = admin.detect_malicious(query.question)
     input_is_safe, _ = validate_input(query.question)
@@ -97,7 +119,8 @@ def chat(query: Query, request: Request):
     user_chat_id = admin.log_chat(user_id=user_id, role="user", content=query.question, ip=ip, matched_keywords=matched)
 
     try:
-        answer = generate_answer(query.question, vector_store, mistral_model)
+        history = [m.model_dump() for m in query.history]
+        answer = generate_answer(query.question, vector_store, mistral_model, history=history)
     except Exception as e:
         admin.log_error("api_chat", f"{type(e).__name__}: {e}")
         return {"error": f"{type(e).__name__}: {e}"}
@@ -131,7 +154,23 @@ HELP_TEXT = """\
 """
 
 
-def generate_response(message: str, user_id: str = "anonymous", ip: str | None = None):
+TIMING_FOOTER = re.compile(r"\n\n_Generated in [\d.]+s_$")
+
+
+def to_model_history(messages) -> list[dict]:
+    """Convert Gradio chat messages into the {"role", "content"} dicts generate_answer expects,
+    dropping the welcome message and the timing footer added to each answer."""
+    history = []
+    for msg in messages:
+        role = msg.role if hasattr(msg, "role") else msg.get("role")
+        content = msg.content if hasattr(msg, "content") else msg.get("content")
+        if role not in ("user", "assistant") or not isinstance(content, str) or content == WELCOME_MESSAGE:
+            continue
+        history.append({"role": role, "content": TIMING_FOOTER.sub("", content)})
+    return history
+
+
+def generate_response(message: str, user_id: str = "anonymous", ip: str | None = None, history: list[dict] | None = None):
     user_text = message.strip()
 
     matched = admin.detect_malicious(user_text)
@@ -153,7 +192,7 @@ def generate_response(message: str, user_id: str = "anonymous", ip: str | None =
             answer = f"Backend not ready: {get_backend_status_str()}"
         else:
             try:
-                answer = generate_answer(user_text, vector_store, mistral_model)
+                answer = generate_answer(user_text, vector_store, mistral_model, history=history)
             except Exception as e:
                 admin.log_error("gradio_chat", f"{type(e).__name__}: {e}")
                 answer = f"Error: {type(e).__name__}: {e}"
@@ -174,6 +213,7 @@ def unlock_input():
 
 
 def chat_generation_loop(message: str, history: List[gr.ChatMessage], request: gr.Request):
+    previous_turns = to_model_history(history)
     history.append(gr.ChatMessage(role="user", content=message))
     yield history
 
@@ -182,7 +222,7 @@ def chat_generation_loop(message: str, history: List[gr.ChatMessage], request: g
 
     result_queue: queue.Queue = queue.Queue()
     gen_thread = threading.Thread(
-        target=lambda: result_queue.put(generate_response(message, user_id, ip))
+        target=lambda: result_queue.put(generate_response(message, user_id, ip, previous_turns))
     )
     gen_thread.start()
 
@@ -272,6 +312,11 @@ with gr.Blocks(title="Dizzy", theme=gr.themes.Soft()) as demo:
     )
 
 
+def create_app() -> FastAPI:
+    """The FastAPI app with the Gradio chat UI mounted at /ui (call once)."""
+    return gr.mount_gradio_app(app, demo, path="/ui")
+
+
 # ──────────────────────────────────────────────
 #  Run
 # ──────────────────────────────────────────────
@@ -285,6 +330,7 @@ SHARE = os.getenv("SHARE", "false").strip().lower() in ("1", "true", "yes")
 
 if __name__ == "__main__":
     if SHARE:
+        start_backend_loader()
         gradio_app, local_url, share_url = demo.launch(
             server_name=os.getenv("HOST", "0.0.0.0"),
             server_port=int(os.getenv("PORT", 8000)),
@@ -304,11 +350,9 @@ if __name__ == "__main__":
         except KeyboardInterrupt:
             demo.close()
     else:
-        app = gr.mount_gradio_app(app, demo, path="/ui")
-
         import uvicorn
         uvicorn.run(
-            app,
+            create_app(),
             host=os.getenv("HOST", "0.0.0.0"),
             port=int(os.getenv("PORT", 8000)),
             proxy_headers=True,

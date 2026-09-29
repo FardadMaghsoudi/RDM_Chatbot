@@ -1,15 +1,15 @@
 from functools import lru_cache
 import torch
-from transformers import AutoModelForCausalLM, Mistral3ForConditionalGeneration, AutoTokenizer, BitsAndBytesConfig
-from peft import PeftModel, get_peft_model
+from transformers import Mistral3ForConditionalGeneration, AutoTokenizer, BitsAndBytesConfig
+from peft import PeftModel
 import re
 import os
 from typing import Tuple
 from dotenv import load_dotenv
-from config import WEB_URLS
+from config import WEB_URLS, ADAPTER_DIR, PROJECT_ROOT
  
-# Load environment variables from .env file
-load_dotenv()
+# Load environment variables from the .env file in the project root
+load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
 
 _forbidden_patterns_env = os.getenv("FORBIDDEN_INPUT_PATTERNS")
 FORBIDDEN_INPUT_PATTERNS = [p.strip() for p in _forbidden_patterns_env.split("||")]
@@ -27,7 +27,6 @@ URL_REF = "\n".join(
 
 # ---- CONFIG ----
 BASE_MODEL = "mistralai/Ministral-3-3B-Instruct-2512-BF16"
-ADAPTER_DIR = "results/Ministral-3-3B-Instruct-2512-BF16-full-r16-test0.1"  # folder with adapter_model.safetensors, etc.
 
 def _build_mistral_model(
     base_model_name: str = BASE_MODEL,
@@ -149,7 +148,8 @@ def generate_answer(query, vector_store, model_and_tokenizer, history=None):
     context = "\n---\n".join(chunks)
 
     final_prompt = build_prompt(query, context, URL_REF, formatted_history)
-    inputs = tokenizer(final_prompt, return_tensors="pt").to(model.device)
+    # The prompt already starts with <s> (as in training), so don't let the tokenizer add a second BOS token
+    inputs = tokenizer(final_prompt, return_tensors="pt", add_special_tokens=False).to(model.device)
     
     with torch.inference_mode():
         outputs = model.generate(
@@ -169,7 +169,7 @@ def generate_answer(query, vector_store, model_and_tokenizer, history=None):
     
     is_safe, final_answer = validate_output(raw_answer.strip())
     if not is_safe:
-        print(f"[SECURITY] Prompt disclosure detected in output. Blocking response.")
+        print("[SECURITY] Prompt disclosure detected in output. Blocking response.")
         return final_answer
 
     return final_answer

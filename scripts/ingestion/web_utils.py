@@ -1,14 +1,6 @@
-import requests
-from bs4 import BeautifulSoup
-from web_crawling import crawl_website, scrape_webpage, crawl_jupyter_book
+from ingestion.web_crawling import crawl_website, crawl_jupyter_book
 import pickle
 import os
-
-def scrape_webpage_old(url):
-    response = requests.get(url)
-    soup = BeautifulSoup(response.content, "html.parser")
-    text = soup.get_text()
-    return clean_text(text)
 
 def get_url_list(allowed_urls: dict) -> list:
     """Extract just the URLs from the ALLOWED_URLS dictionary, returning a plain list."""
@@ -55,6 +47,9 @@ def save_or_load_web_chunks(web_chunks_path, web_urls, split_text_func, web_craw
         if text:
             chunks = split_text_func(text)
             web_chunks.extend(chunks)
+
+    # Drop exact duplicate chunks, keeping the first occurrence
+    web_chunks = list(dict.fromkeys(web_chunks))
 
     # 3. Save to disk
     # Ensure directory exists
