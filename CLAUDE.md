@@ -9,6 +9,9 @@ Dizzy is a RAG chatbot for TU Delft Research Data Management: crawl/parse source
 - Don't delete files: move superseded code to `archive/` and say so.
 - Never commit secrets (`.env`), source documents (`docs/`), built indexes, pickles or model adapters. Add them to `.gitignore` if needed.
 - Run everything from the repo root.
+- Confidential data (source PDFs, training Q&A, eval sets built from them) exists only on the company server. It never goes into the repo or into a Claude session.
+- Laptop work uses public web sources and sample PDFs only.
+- Never copy, deploy or push anything to the server. The owner moves code there themselves.
 
 ## This machine
 - Laptop, no CUDA GPU. Use it for crawling, extraction, chunking, validation, indexing and retrieval evaluation (embedding model on CPU is fine).
@@ -32,3 +35,28 @@ Dizzy is a RAG chatbot for TU Delft Research Data Management: crawl/parse source
 - `main.py` calls `generate_answer` without chat history.
 - Inference prompt differs from training (URL list, history, double BOS, literal `</s>`, `[INST]` instead of the chat template).
 - `finetune_new.py` truncates the end of the prompt (cuts the question); same split used for checkpoint choice and final metrics.
+
+## Status / next session
+Last updated 2026-11-17. Step 1 in progress; no project code changed yet.
+
+### Checked so far
+- `requirements.txt` is a full freeze from a Python 3.11+ environment. On 3.10 it fails to resolve (`numpy 2.3.5`, `scipy 1.16.3`, `networkx 3.5`, `contourpy 1.3.3` need 3.11+). On 3.11 it resolves unchanged (dry run, GPU packages excluded).
+- `faiss-cpu 1.13.2` only has macOS 14+ wheels. For uv dry runs, set `MACOSX_DEPLOYMENT_TARGET=15.0` (the laptop runs macOS 15).
+- Laptop Pythons: 3.11.9 at `/Library/Frameworks/Python.framework/Versions/3.11/bin/python3`; `uv` at `~/.local/bin/uv`. No venv created yet.
+- torch and peft must be in base: `main.py` imports `mistral_model.py`, which imports both, and sentence-transformers needs torch to embed on CPU.
+- Packages in the freeze that nothing in `scripts/` imports: `llama_cpp_python`, `diffusers`, `tyro`, `msgspec`, `ruff`, `hf_transfer`. `dotenv==0.9.9` is a shim for `python-dotenv`.
+- Env vars the code reads: `HF_TOKEN`, `SYSTEM_PROMPT`, `SAFE_RESPONSE`, `FORBIDDEN_INPUT_PATTERNS`, `DISCLOSURE_OUTPUT_PATTERNS` (`mistral_model.py`); `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_DB_PATH` (`admin.py`); `HOST`, `PORT`, `SHARE`, `FORWARDED_ALLOW_IPS` (`main.py`). If `SYSTEM_PROMPT` is unset, `mistral_model.py` crashes on import (`None.replace`).
+- Tracked files that must not be in the repo: `Ministral-3-3B-Instruct-2512-BF16-full-r16-test0.1.zip` (LoRA adapter, Git LFS) and `preprocessed-data/*.pkl`.
+
+### Decisions
+- Python 3.11, pins unchanged.
+- Stop tracking the adapter zip and the pickles with `git rm --cached` (local files stay). The pickles contain text from confidential PDFs. Do this in its own commit and add them to `.gitignore`.
+- No history rewrite. The files stay in past commits on `main` and `Kimiadev`.
+
+### Remaining for step 1
+1. Run `git lfs pull` and confirm the adapter zip is the real file, not an LFS pointer.
+2. Split the requirements. Base = the transitive closure of the direct base packages at the freeze's pins (resolve with `uv pip compile -c requirements.txt` for macOS arm64 and linux x86_64). GPU = everything else (`-r requirements-base.txt` + CUDA packages + training packages + the unused ones above, commented). Move `requirements.txt` to `archive/`.
+3. Write `.env.example` with every variable above, with no real values.
+4. Update the README setup section (uv venv on 3.11, base vs GPU install, `cp .env.example .env`).
+5. Make a separate commit that untracks the zip and pickles and updates `.gitignore`.
+6. Create a `.venv` on 3.11, install the base requirements, and smoke-test: import every module and start `main.py`. Report the result; don't judge answer quality.
